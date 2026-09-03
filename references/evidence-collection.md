@@ -11,6 +11,10 @@ Never execute the supplied query. Reject tooling that cannot prove its request i
 Do not use `take`, `count`, result truncation, or cancellation as substitutes for
 non-execution.
 
+Cluster transport must use HTTPS except for the explicit local-development exception: HTTP is
+allowed only for exact `localhost`, IPv4 `127.0.0.0/8`, or IPv6 `::1`. Userinfo, hostname
+suffix tricks, non-loopback HTTP, and non-HTTP(S) schemes are invalid.
+
 ## Plan record
 
 Record only:

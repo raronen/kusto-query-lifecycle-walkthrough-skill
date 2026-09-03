@@ -17,7 +17,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from model_contract import ModelError, STAGES, query_slug, validate_complete_model
+from model_contract import (
+    ModelError,
+    STAGES,
+    query_slug,
+    validate_cluster_uri,
+    validate_complete_model,
+)
 from render_walkthrough import render
 
 
@@ -299,6 +305,60 @@ def retarget_model(model: dict, head: str) -> dict:
 
 
 class ContractTests(unittest.TestCase):
+    def test_cluster_uri_accepts_https_and_loopback_http(self) -> None:
+        accepted = (
+            "https://example.kusto.windows.net",
+            "HTTPS://EXAMPLE.KUSTO.WINDOWS.NET:443/path",
+            "http://localhost:8080",
+            "HTTP://LOCALHOST:8080/path?x=1",
+            "http://127.0.0.1",
+            "http://127.42.0.9:9000",
+            "http://[::1]",
+            "http://[::1]:8080/path",
+        )
+        for uri in accepted:
+            with self.subTest(uri=uri):
+                validate_cluster_uri(uri)
+
+    def test_cluster_uri_rejects_non_loopback_http_and_other_schemes(self) -> None:
+        rejected = (
+            "http://example.kusto.windows.net",
+            "http://localhost.example.com",
+            "http://localhost.evil",
+            "http://localhost@evil.example",
+            "http://evil@localhost",
+            "http://127.0.0.1@evil.example",
+            "http://128.0.0.1",
+            "http://[::2]",
+            "ftp://localhost",
+            "file://localhost/path",
+            "localhost:8080",
+            "https:///missing-host",
+        )
+        for uri in rejected:
+            with self.subTest(uri=uri):
+                with self.assertRaises(ModelError):
+                    validate_cluster_uri(uri)
+
+    def test_complete_model_applies_cluster_uri_contract(self) -> None:
+        model = complete_model()
+        model["query"]["cluster_uri"] = "http://127.42.0.9:8080"
+        model["query"]["slug"] = query_slug(
+            model["query"]["text"],
+            model["query"]["cluster_uri"],
+            model["query"]["database"],
+        )
+        validate_complete_model(model)
+
+        model["query"]["cluster_uri"] = "http://remote.example"
+        model["query"]["slug"] = query_slug(
+            model["query"]["text"],
+            model["query"]["cluster_uri"],
+            model["query"]["database"],
+        )
+        with self.assertRaisesRegex(ModelError, "loopback"):
+            validate_complete_model(model)
+
     def test_complete_synthetic_model_validates(self) -> None:
         validate_complete_model(complete_model())
 
@@ -337,6 +397,13 @@ class ContractTests(unittest.TestCase):
             "/_git/Azure-Kusto-Service", "/_git/Other/Azure-Kusto-Service"
         )
         with self.assertRaisesRegex(ModelError, "canonical"):
+            validate_complete_model(model)
+
+    def test_source_links_still_require_https(self) -> None:
+        model = complete_model()
+        link = model["stages"][0]["source_links"][0]
+        link["url"] = link["url"].replace("https://", "http://", 1)
+        with self.assertRaisesRegex(ModelError, "Azure DevOps HTTPS"):
             validate_complete_model(model)
 
     def test_physical_tree_must_match_plan_operator_count(self) -> None:
@@ -575,6 +642,54 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(draft["query"]["text"], QUERY)
             self.assertEqual(draft["source"]["workspace_head"], self.source_head)
 
+    def test_scaffolder_accepts_localhost_http(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "draft.json"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "scaffold_model.py"),
+                    "--query-file",
+                    str(ROOT / "tests" / "fixtures" / "synthetic-query.kql"),
+                    "--cluster-uri",
+                    "http://localhost:8080",
+                    "--database",
+                    "Synthetic",
+                    "--source-workspace",
+                    str(self.source_workspace),
+                    "--output",
+                    str(output),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            draft = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(draft["query"]["cluster_uri"], "http://localhost:8080")
+
+    def test_scaffolder_rejects_remote_http(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "scaffold_model.py"),
+                    "--query-file",
+                    str(ROOT / "tests" / "fixtures" / "synthetic-query.kql"),
+                    "--cluster-uri",
+                    "http://example.kusto.windows.net",
+                    "--database",
+                    "Synthetic",
+                    "--source-workspace",
+                    str(self.source_workspace),
+                    "--output",
+                    str(Path(directory) / "draft.json"),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("loopback", result.stderr)
+
     def test_packager_builds_deterministic_skill_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.skill"
@@ -621,6 +736,35 @@ class ScriptTests(unittest.TestCase):
             "lifetime",
         ):
             self.assertIn(field, component_required)
+
+    def test_schema_cluster_uri_patterns_cover_only_https_or_loopback_http(self) -> None:
+        schema = json.loads(
+            (ROOT / "references" / "evidence-model.schema.json").read_text(encoding="utf-8")
+        )
+        alternatives = schema["properties"]["query"]["properties"]["cluster_uri"]["anyOf"]
+
+        def accepted(uri: str) -> bool:
+            return any(re.search(item["pattern"], uri) is not None for item in alternatives)
+
+        for uri in (
+            "https://example.kusto.windows.net",
+            "http://localhost:8080",
+            "http://127.0.0.1",
+            "http://127.42.0.9",
+            "http://[::1]:8080",
+        ):
+            with self.subTest(uri=uri):
+                self.assertTrue(accepted(uri))
+        for uri in (
+            "http://example.kusto.windows.net",
+            "http://localhost.evil",
+            "http://localhost@evil",
+            "http://evil@localhost",
+            "http://128.0.0.1",
+            "ftp://localhost",
+        ):
+            with self.subTest(uri=uri):
+                self.assertFalse(accepted(uri))
 
 
 if __name__ == "__main__":

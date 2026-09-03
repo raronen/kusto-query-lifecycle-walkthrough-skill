@@ -5,7 +5,13 @@ import json
 import subprocess
 from pathlib import Path
 
-from model_contract import STAGES, is_authorized_source_remote, query_slug
+from model_contract import (
+    ModelError,
+    STAGES,
+    is_authorized_source_remote,
+    query_slug,
+    validate_cluster_uri,
+)
 
 
 def resolve_head(workspace: str | None, project: str) -> str:
@@ -48,8 +54,10 @@ def main() -> int:
     query = query_path.read_text(encoding="utf-8")
     if not query.strip():
         parser.error("--query-file must contain non-empty query text")
-    if not args.cluster_uri.startswith("https://"):
-        parser.error("--cluster-uri must be an absolute HTTPS URI")
+    try:
+        validate_cluster_uri(args.cluster_uri, "--cluster-uri")
+    except ModelError as exc:
+        parser.error(str(exc))
     if not args.database.strip():
         parser.error("--database must not be empty")
 

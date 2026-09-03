@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 import subprocess
@@ -34,6 +35,45 @@ EVIDENCE_KINDS = {
 
 class ModelError(ValueError):
     pass
+
+
+def validate_cluster_uri(value: str, location: str = "cluster URI") -> None:
+    if not isinstance(value, str) or not value:
+        raise ModelError(f"{location} must be a non-empty string.")
+    if any(character.isspace() for character in value):
+        raise ModelError(f"{location} must not contain whitespace.")
+
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError as exc:
+        raise ModelError(f"{location} is not a valid absolute URI: {exc}") from exc
+
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.netloc or hostname is None:
+        raise ModelError(
+            f"{location} must be absolute HTTPS, or HTTP only for a loopback host."
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise ModelError(f"{location} must not contain userinfo.")
+    if parsed.netloc.endswith(":"):
+        raise ModelError(f"{location} contains an empty port.")
+    if scheme == "https":
+        return
+
+    normalized_host = hostname.lower()
+    if normalized_host == "localhost":
+        return
+    try:
+        address = ipaddress.ip_address(normalized_host)
+    except ValueError as exc:
+        raise ModelError(f"{location} permits HTTP only for a loopback host.") from exc
+    if isinstance(address, ipaddress.IPv4Address) and address.is_loopback:
+        return
+    if isinstance(address, ipaddress.IPv6Address) and normalized_host == "::1":
+        return
+    raise ModelError(f"{location} permits HTTP only for localhost, 127.0.0.0/8, or ::1.")
 
 
 def query_slug(query: str, cluster_uri: str, database: str) -> str:
@@ -405,9 +445,7 @@ def validate_complete_model(model: dict[str, Any]) -> None:
     _reject_extra(query, ("text", "cluster_uri", "database", "title", "slug"), "model.query")
     for key in ("text", "cluster_uri", "database", "title", "slug"):
         _text(query[key], f"model.query.{key}")
-    parsed_cluster = urlparse(query["cluster_uri"])
-    if parsed_cluster.scheme != "https" or not parsed_cluster.netloc:
-        raise ModelError("model.query.cluster_uri must be an absolute HTTPS URI.")
+    validate_cluster_uri(query["cluster_uri"], "model.query.cluster_uri")
     expected_slug = query_slug(query["text"], query["cluster_uri"], query["database"])
     if query["slug"] != expected_slug:
         raise ModelError("model.query.slug is not the stable query-derived slug.")
