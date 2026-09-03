@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="walkthrough-evidence-mode" content="__EVIDENCE_MODE__">
+  <title>__DOCUMENT_TITLE__</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111f;
+      --panel: #101c2f;
+      --panel-2: #16243b;
+      --ink: #eef6ff;
+      --muted: #a9b9ce;
+      --line: #2c4260;
+      --cyan: #62d8f3;
+      --violet: #af8dff;
+      --green: #68dda8;
+      --amber: #ffc96b;
+      --red: #ff8e9e;
+      --shadow: 0 18px 60px rgb(0 0 0 / 28%);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 280px;
+      background:
+        radial-gradient(circle at 80% 0, rgb(98 216 243 / 12%), transparent 28rem),
+        radial-gradient(circle at 10% 20%, rgb(175 141 255 / 10%), transparent 24rem),
+        var(--bg);
+      color: var(--ink);
+      font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    button, a { font: inherit; }
+    a { color: var(--cyan); text-underline-offset: .18em; }
+    a:hover { color: white; }
+    :focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+    .shell { width: min(1440px, 100%); margin: 0 auto; padding: clamp(1rem, 3vw, 3rem); }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 2rem;
+      align-items: end;
+      padding: clamp(1.25rem, 4vw, 3rem);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgb(22 36 59 / 95%), rgb(8 17 31 / 95%));
+      box-shadow: var(--shadow);
+    }
+    h1, h2, h3, h4 { line-height: 1.12; margin: 0 0 .7rem; }
+    h1 { font-size: clamp(2rem, 5vw, 4.5rem); max-width: 16ch; letter-spacing: -.045em; }
+    h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); }
+    h3 { font-size: 1.2rem; }
+    p { margin: .4rem 0 1rem; }
+    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+    .muted { color: var(--muted); }
+    .mode {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 9rem;
+      padding: .7rem 1rem;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      color: var(--green);
+      font-weight: 900;
+      letter-spacing: .08em;
+    }
+    .mode.estimated { color: var(--amber); }
+    .query-card, .stage-panel, .lab, .tree-node, .event-panel {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgb(16 28 47 / 92%);
+    }
+    .query-card { margin-top: 1rem; padding: 1rem 1.2rem; }
+    .query-card dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem 1rem; }
+    dt { color: var(--muted); }
+    dd { margin: 0; overflow-wrap: anywhere; }
+    pre {
+      overflow: auto;
+      margin: .7rem 0 0;
+      padding: 1rem;
+      border-radius: 12px;
+      background: #050b14;
+      color: #d7edff;
+      font: 14px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    .stage-nav, .action-nav, .timeline-nav {
+      display: flex;
+      gap: .55rem;
+      margin: 1.25rem 0;
+      padding: .2rem .1rem .7rem;
+      overflow-x: auto;
+      scrollbar-color: var(--line) transparent;
+    }
+    .stage-button, .action-button, .timeline-button {
+      flex: 0 0 auto;
+      min-width: 8.5rem;
+      padding: .75rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      color: var(--ink);
+      text-align: left;
+      cursor: pointer;
+    }
+    .stage-button[aria-selected="true"], .action-button[aria-selected="true"],
+    .timeline-button[aria-selected="true"] {
+      border-color: var(--cyan);
+      background: linear-gradient(135deg, rgb(98 216 243 / 18%), rgb(175 141 255 / 12%));
+      box-shadow: inset 0 0 0 1px rgb(98 216 243 / 40%);
+    }
+    .stage-button small, .action-button small, .timeline-button small {
+      display: block;
+      color: var(--muted);
+    }
+    .stage-panel { padding: clamp(1rem, 3vw, 2rem); min-height: 18rem; }
+    .stage-head { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+    .badge {
+      display: inline-flex;
+      padding: .25rem .6rem;
+      border-radius: 999px;
+      background: rgb(104 221 168 / 13%);
+      color: var(--green);
+      font-size: .78rem;
+      font-weight: 900;
+      letter-spacing: .06em;
+    }
+    .badge.no-op, .badge.scheduled-no-op { color: var(--amber); background: rgb(255 201 107 / 12%); }
+    .badge.estimated { color: var(--amber); background: rgb(255 201 107 / 12%); }
+    .no-op {
+      border-left: 4px solid var(--amber);
+      margin: 1rem 0;
+      padding: .8rem 1rem;
+      background: rgb(255 201 107 / 8%);
+    }
+    .lab { margin-top: 1rem; padding: 1rem; }
+    .grid-2, .stack-heap {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+    .fact-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .8rem;
+      margin-top: 1rem;
+    }
+    .fact, .stack-frame, .heap-zone, .component {
+      padding: .85rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel-2);
+    }
+    .fact strong, .component strong { display: block; color: var(--cyan); }
+    .links { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-top: 1rem; }
+    .tree { overflow-x: auto; padding-bottom: .5rem; }
+    .tree ul { list-style: none; margin: .75rem 0 0 1.1rem; padding-left: 1.1rem; border-left: 1px solid var(--line); }
+    .tree li { margin: .75rem 0; }
+    .tree-node { min-width: 17rem; padding: .85rem 1rem; }
+    .tree-node code { color: var(--violet); }
+    .execution-layout { display: grid; gap: 1rem; }
+    .event-panel { padding: 1rem; }
+    .stack-heap { margin-top: 1rem; }
+    .stack-list, .heap-list, .component-list { display: grid; gap: .7rem; }
+    .language { color: var(--violet); font-weight: 800; }
+    .state { color: var(--amber); font-weight: 800; text-transform: uppercase; font-size: .76rem; }
+    #runtime-components { margin-top: 1rem; }
+    .component dl { display: grid; grid-template-columns: 9rem 1fr; gap: .25rem .7rem; }
+    footer { padding: 2rem 0 0; color: var(--muted); text-align: center; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
+    @media (max-width: 760px) {
+      .hero, .grid-2, .stack-heap, .fact-grid { grid-template-columns: 1fr; }
+      .hero { align-items: start; }
+      .stage-head { display: block; }
+      .query-card dl, .component dl { grid-template-columns: 1fr; }
+      dd { margin-bottom: .5rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+    }
+    @media print {
+      :root { color-scheme: light; --bg: white; --panel: white; --panel-2: #f5f7fa; --ink: #111827; --muted: #4b5563; --line: #cbd5e1; }
+      body { background: white; }
+      .shell { width: 100%; padding: 0; }
+      .stage-nav, .action-nav, .timeline-nav { display: none; }
+      .hero, .stage-panel { box-shadow: none; }
+      a { color: #075985; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <div class="eyebrow">Kusto query lifecycle</div>
+        <h1>__DOCUMENT_TITLE__</h1>
+        <p class="muted">A query-specific, source-grounded journey from syntax to execution.</p>
+      </div>
+      <div class="mode" id="evidence-mode">__EVIDENCE_MODE__</div>
+    </header>
+
+    <section class="query-card" aria-labelledby="query-heading">
+      <h2 id="query-heading">Query context</h2>
+      <dl>
+        <dt>Cluster</dt><dd id="cluster"></dd>
+        <dt>Database</dt><dd id="database"></dd>
+        <dt>Source commit</dt><dd><code id="commit"></code></dd>
+      </dl>
+      <pre id="query-text" aria-label="Supplied query text"></pre>
+      <p class="no-op" id="estimate-reason" hidden></p>
+    </section>
+
+    <nav class="stage-nav" id="stage-nav" aria-label="Ten query lifecycle phases"></nav>
+    <section class="stage-panel" id="stage-panel" aria-live="polite">
+      <div class="stage-head">
+        <div><div class="eyebrow" id="stage-number"></div><h2 id="stage-title"></h2></div>
+        <span class="badge" id="stage-badge"></span>
+      </div>
+      <p id="stage-summary"></p>
+      <div class="no-op" id="no-op" hidden></div>
+      <div class="links" id="stage-links"></div>
+      <nav class="action-nav" id="action-nav" aria-label="Actions in selected phase"></nav>
+      <div id="stage-content"></div>
+    </section>
+    <footer>Generated locally from validated evidence. The supplied query was not executed.</footer>
+  </main>
+
+  <script type="application/json" id="walkthrough-data">__MODEL_JSON__</script>
+  <script>
+    "use strict";
+    const model = JSON.parse(document.getElementById("walkthrough-data").textContent);
+    const byId = (id) => document.getElementById(id);
+    const node = (tag, className, text) => {
+      const item = document.createElement(tag);
+      if (className) item.className = className;
+      if (text !== undefined) item.textContent = text;
+      return item;
+    };
+    const clear = (item) => item.replaceChildren();
+    const badgeClass = (kind) => `badge ${kind.toLowerCase().replaceAll("_", "-")}`;
+    const addLinks = (container, links) => {
+      clear(container);
+      for (const link of links) {
+        const anchor = node("a", "", `${link.label} · L${link.start_line}-${link.end_line}`);
+        anchor.href = link.url;
+        anchor.target = "_blank";
+        anchor.rel = "noreferrer";
+        container.append(anchor);
+      }
+    };
+    const linksBlock = (links) => {
+      const block = node("div", "links");
+      addLinks(block, links);
+      return block;
+    };
+
+    byId("cluster").textContent = model.query.cluster_uri;
+    byId("database").textContent = model.query.database;
+    byId("commit").textContent = model.source.workspace_head;
+    byId("query-text").textContent = model.query.text;
+    byId("evidence-mode").classList.toggle("estimated", model.evidence_mode === "ESTIMATED");
+    if (model.evidence_mode === "ESTIMATED") {
+      byId("estimate-reason").hidden = false;
+      byId("estimate-reason").textContent = `ESTIMATED: ${model.estimate_reason}`;
+    }
+
+    let stageIndex = 0;
+    let actionIndex = 0;
+    let eventIndex = 0;
+
+    function renderAction(action, optimizer) {
+      const lab = node("section", "lab");
+      const header = node("div", "stage-head");
+      const heading = node("h3", "", action.title);
+      const evidence = node("span", badgeClass(action.evidence_kind), action.evidence_kind);
+      header.append(heading, evidence);
+      lab.append(header, node("p", "", action.description));
+
+      const compare = node("div", "grid-2");
+      const before = node("section", "fact");
+      before.append(node("h4", "", "Before"), node("pre", "", action.before || "No materialized form"));
+      const after = node("section", "fact");
+      after.append(node("h4", "", "After"), node("pre", "", action.after || "No materialized form"));
+      compare.append(before, after);
+      lab.append(compare);
+
+      if (optimizer) {
+        const facts = node("div", "fact-grid");
+        const values = [
+          ["Traversal", action.traversal.join(" → ")],
+          ["Predicate", action.predicate],
+          ["Why applicable", action.applicability],
+          ["Optimizes", action.optimization]
+        ];
+        for (const [label, value] of values) {
+          const fact = node("div", "fact");
+          fact.append(node("strong", "", label), node("span", "", value));
+          facts.append(fact);
+        }
+        lab.append(facts);
+      }
+      lab.append(linksBlock(action.source_links));
+      return lab;
+    }
+
+    function renderPhysical(stage) {
+      const wrapper = node("section", "lab");
+      const status = stage.physical_plan.complete ? "Complete physical plan" : "Estimated physical plan";
+      wrapper.append(node("h3", "", `${status} · ${stage.physical_plan.operator_count} operators`));
+      const tree = node("div", "tree");
+      const list = node("ul");
+      function renderOperator(operator) {
+        const item = node("li");
+        const card = node("article", "tree-node");
+        card.append(
+          node("code", "", operator.operator_id),
+          node("h4", "", operator.name),
+          node("p", "", operator.details),
+          linksBlock(operator.source_links)
+        );
+        item.append(card);
+        if (operator.children.length) {
+          const children = node("ul");
+          for (const child of operator.children) children.append(renderOperator(child));
+          item.append(children);
+        }
+        return item;
+      }
+      list.append(renderOperator(stage.physical_plan.root));
+      tree.append(list);
+      wrapper.append(tree);
+      return wrapper;
+    }
+
+    function renderExecutionEvent(event) {
+      const panel = node("article", "event-panel");
+      panel.append(node("div", "eyebrow", event.user_event), node("h3", "", event.title), node("p", "", event.description));
+
+      const stackHeap = node("div", "stack-heap");
+      const stack = node("section", "lab");
+      stack.id = "conceptual-call-stack";
+      stack.append(node("h4", "", "Conceptual mixed-language call stack"));
+      const stackList = node("div", "stack-list");
+      for (const frame of event.call_stack) {
+        const card = node("article", "stack-frame");
+        card.append(node("span", "language", frame.language), node("p", "", frame.frame), linksBlock(frame.source_links));
+        stackList.append(card);
+      }
+      stack.append(stackList);
+
+      const heap = node("section", "lab");
+      heap.id = "heap-lifetime-zones";
+      heap.append(node("h4", "", "Heap and query-lifetime zones"));
+      const heapList = node("div", "heap-list");
+      if (!event.heap_zones.length) heapList.append(node("p", "muted", "No applicable heap zone is evidenced for this event."));
+      for (const zone of event.heap_zones) {
+        const card = node("article", "heap-zone");
+        card.append(
+          node("span", "language", zone.language),
+          node("span", "state", ` ${zone.state}`),
+          node("h4", "", zone.zone),
+          node("p", "", zone.details),
+          node("p", "muted", `Evidence basis: ${zone.evidence_basis}`),
+          linksBlock(zone.source_links)
+        );
+        heapList.append(card);
+      }
+      heap.append(heapList);
+      stackHeap.append(stack, heap);
+      panel.append(stackHeap);
+
+      const components = node("section", "lab");
+      components.id = "runtime-components";
+      components.append(node("h4", "", "Runtime components below stack and heap"));
+      const componentList = node("div", "component-list");
+      for (const component of event.components) {
+        const card = node("article", "component");
+        card.append(node("h4", "", component.name), node("p", "", component.role));
+        const facts = node("dl");
+        const values = [
+          ["Pull direction", component.pull_direction],
+          ["Data direction", component.data_direction],
+          ["Ownership now", component.ownership_now],
+          ["Next breakpoint", component.next_breakpoint],
+          ["Failure", component.failure],
+          ["Cancellation", component.cancellation],
+          ["Lifetime", component.lifetime]
+        ];
+        for (const [label, value] of values) facts.append(node("dt", "", label), node("dd", "", value));
+        card.append(facts, linksBlock(component.source_links));
+        componentList.append(card);
+      }
+      components.append(componentList);
+      panel.append(components, linksBlock(event.source_links));
+      return panel;
+    }
+
+    function renderExecution(stage, content) {
+      const layout = node("div", "execution-layout");
+      const nav = node("nav", "timeline-nav");
+      nav.setAttribute("aria-label", "User-driven execution timeline");
+      stage.timeline.forEach((event, index) => {
+        const button = node("button", "timeline-button");
+        button.type = "button";
+        button.setAttribute("aria-selected", String(index === eventIndex));
+        button.append(node("small", "", `Event ${index + 1}`), node("strong", "", event.title));
+        button.addEventListener("click", () => { eventIndex = index; renderStage(); });
+        nav.append(button);
+      });
+      layout.append(nav, renderExecutionEvent(stage.timeline[eventIndex]));
+      content.append(layout);
+    }
+
+    function renderStage() {
+      const stage = model.stages[stageIndex];
+      byId("stage-number").textContent = `Phase ${stage.order} of 10`;
+      byId("stage-title").textContent = stage.title;
+      byId("stage-summary").textContent = stage.summary;
+      byId("stage-badge").textContent = stage.evidence_kind;
+      byId("stage-badge").className = badgeClass(stage.evidence_kind);
+      byId("no-op").hidden = !stage.no_op_explanation;
+      byId("no-op").textContent = stage.no_op_explanation ? `Why this is a no-op: ${stage.no_op_explanation}` : "";
+      addLinks(byId("stage-links"), stage.source_links);
+
+      [...byId("stage-nav").children].forEach((button, index) => {
+        button.setAttribute("aria-selected", String(index === stageIndex));
+      });
+      const actionNav = byId("action-nav");
+      clear(actionNav);
+      const content = byId("stage-content");
+      clear(content);
+
+      if (stage.kind === "physical") {
+        content.append(renderPhysical(stage));
+        return;
+      }
+      if (stage.kind === "execute") {
+        eventIndex = Math.min(eventIndex, stage.timeline.length - 1);
+        renderExecution(stage, content);
+        return;
+      }
+
+      const actions = stage.kind === "serialization" ? stage.boundaries : stage.actions;
+      if (!actions.length) return;
+      actionIndex = Math.min(actionIndex, actions.length - 1);
+      actions.forEach((action, index) => {
+        const button = node("button", "action-button");
+        button.type = "button";
+        button.setAttribute("aria-selected", String(index === actionIndex));
+        button.append(node("small", "", `${stage.kind === "optimizer" ? "Applicable pass" : "Substep"} ${index + 1}`), node("strong", "", action.title));
+        button.addEventListener("click", () => { actionIndex = index; renderStage(); });
+        actionNav.append(button);
+      });
+      content.append(renderAction(actions[actionIndex], stage.kind === "optimizer"));
+    }
+
+    model.stages.forEach((stage, index) => {
+      const button = node("button", "stage-button");
+      button.type = "button";
+      button.setAttribute("aria-selected", String(index === 0));
+      button.append(node("small", "", `Phase ${stage.order}`), node("strong", "", stage.title));
+      button.addEventListener("click", () => {
+        stageIndex = index;
+        actionIndex = 0;
+        eventIndex = 0;
+        renderStage();
+      });
+      byId("stage-nav").append(button);
+    });
+    renderStage();
+  </script>
+</body>
+</html>

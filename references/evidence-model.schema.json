@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/raronen/kusto-query-lifecycle-walkthrough-skill/evidence-model.schema.json",
+  "title": "Kusto query lifecycle walkthrough evidence model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_state",
+    "evidence_mode",
+    "estimate_reason",
+    "query",
+    "source",
+    "plan",
+    "stages"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "model_state": { "enum": ["DRAFT", "COMPLETE"] },
+    "evidence_mode": { "enum": ["EVIDENCE", "ESTIMATED"] },
+    "estimate_reason": { "type": "string" },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "cluster_uri", "database", "title", "slug"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "cluster_uri": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "database": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "pattern": "^kusto-query-[a-z0-9-]+-[0-9a-f]{12}$" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["organization", "project", "repository", "workspace_head"],
+      "properties": {
+        "organization": { "const": "msazure" },
+        "project": { "type": "string", "minLength": 1 },
+        "repository": { "const": "Azure-Kusto-Service" },
+        "workspace_head": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tool", "collected_at_utc", "non_executing", "digest_sha256", "operator_count"],
+      "properties": {
+        "tool": { "type": "string" },
+        "collected_at_utc": { "type": "string" },
+        "non_executing": { "type": "boolean" },
+        "digest_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "operator_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/stage" }
+    }
+  },
+  "$defs": {
+    "sourceLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "url", "path", "start_line", "end_line", "commit"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "url": {
+          "type": "string",
+          "pattern": "^https://dev\\.azure\\.com/msazure/.+/_git/Azure-Kusto-Service\\?.*version=GC[0-9a-f]{40}.*line=[0-9]+.*lineEnd=[0-9]+"
+        },
+        "path": { "type": "string", "pattern": "^/" },
+        "start_line": { "type": "integer", "minimum": 1 },
+        "end_line": { "type": "integer", "minimum": 1 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "description",
+        "evidence_kind",
+        "before",
+        "after",
+        "source_links"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "evidence_kind": {
+          "enum": ["PENDING", "OBSERVED", "TRANSFORMED", "SCHEDULED_NO_OP", "NO_OP", "ESTIMATED"]
+        },
+        "before": { "type": "string" },
+        "after": { "type": "string" },
+        "traversal": { "type": "array", "items": { "type": "string" } },
+        "predicate": { "type": "string" },
+        "applicability": { "type": "string" },
+        "optimization": { "type": "string" },
+        "source_links": { "type": "array", "items": { "$ref": "#/$defs/sourceLink" } }
+      }
+    },
+    "operator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operator_id", "name", "details", "source_links", "children"],
+      "properties": {
+        "operator_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "details": { "type": "string", "minLength": 1 },
+        "source_links": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLink" }
+        },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/operator" } }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "frame", "source_links"],
+      "properties": {
+        "language": { "enum": ["Managed", "C++", "Rust"] },
+        "frame": { "type": "string", "minLength": 1 },
+        "source_links": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLink" }
+        }
+      }
+    },
+    "heapZone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zone", "language", "state", "details", "evidence_basis", "source_links"],
+      "properties": {
+        "zone": { "type": "string", "minLength": 1 },
+        "language": { "enum": ["Managed", "C++", "Rust"] },
+        "state": { "enum": ["borrowed", "owned", "released"] },
+        "details": { "type": "string", "minLength": 1 },
+        "evidence_basis": { "type": "string", "minLength": 1 },
+        "source_links": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLink" }
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "evidence_ref",
+        "role",
+        "pull_direction",
+        "data_direction",
+        "ownership_now",
+        "next_breakpoint",
+        "failure",
+        "cancellation",
+        "lifetime",
+        "source_links"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "evidence_ref": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "pull_direction": { "type": "string", "minLength": 1 },
+        "data_direction": { "type": "string", "minLength": 1 },
+        "ownership_now": { "type": "string", "minLength": 1 },
+        "next_breakpoint": { "type": "string", "minLength": 1 },
+        "failure": { "type": "string", "minLength": 1 },
+        "cancellation": { "type": "string", "minLength": 1 },
+        "lifetime": { "type": "string", "minLength": 1 },
+        "source_links": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLink" }
+        }
+      }
+    },
+    "timelineEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "user_event",
+        "description",
+        "call_stack",
+        "heap_zones",
+        "components",
+        "source_links"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "user_event": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "call_stack": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/frame" } },
+        "heap_zones": { "type": "array", "items": { "$ref": "#/$defs/heapZone" } },
+        "components": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/component" } },
+        "source_links": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/sourceLink" }
+        }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order",
+        "title",
+        "kind",
+        "summary",
+        "evidence_kind",
+        "no_op_explanation",
+        "source_links",
+        "actions"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "title": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["standard", "optimizer", "physical", "serialization", "execute"] },
+        "summary": { "type": "string" },
+        "evidence_kind": {
+          "enum": ["PENDING", "OBSERVED", "TRANSFORMED", "SCHEDULED_NO_OP", "NO_OP", "ESTIMATED"]
+        },
+        "no_op_explanation": { "type": "string" },
+        "source_links": { "type": "array", "items": { "$ref": "#/$defs/sourceLink" } },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+        "physical_plan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["complete", "operator_count", "root"],
+          "properties": {
+            "complete": { "type": "boolean" },
+            "operator_count": { "type": "integer", "minimum": 1 },
+            "root": { "$ref": "#/$defs/operator" }
+          }
+        },
+        "boundaries": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+        "timeline": { "type": "array", "items": { "$ref": "#/$defs/timelineEvent" } }
+      }
+    }
+  }
+}
