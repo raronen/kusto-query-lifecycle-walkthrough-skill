@@ -31,10 +31,13 @@ https://dev.azure.com/msazure/<project>/_git/Azure-Kusto-Service
   ?path=/path/to/file
   &version=GC<commit>
   &line=<start>
-  &lineEnd=<end>
+  &lineEnd=<inclusive-end-plus-one>
   &lineStartColumn=1
   &lineEndColumn=1
 ```
+
+Azure DevOps treats `lineEnd` as exclusive. The model's `end_line` is inclusive, so encode
+`lineEnd=end_line+1` while keeping the displayed model range inclusive.
 
 Use the current workspace path and exact line range. Verify each target after constructing it.
 Do not link to search results, directory pages, PR diffs, branch tips, or whole files.

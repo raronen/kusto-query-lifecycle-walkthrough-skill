@@ -10,6 +10,10 @@ The generated page must be:
 - titled and headed with the query-specific walkthrough title;
 - visibly labeled `EVIDENCE` or `ESTIMATED` near the top and in metadata;
 - organized as a ten-phase stage rail plus a substep/action rail;
+- complete against the semantic feature IDs and interaction invariants in
+  `feature-parity-inventory.json`;
+- stateful rather than decorative: navigation, traversal, runner, experiment, context,
+  failure-injection, and scenario controls must change visible output;
 - explicit about query-specific no-op phases;
 - complete for the evidenced physical plan;
 - ordered so execution stack and heap zones appear before runtime components;

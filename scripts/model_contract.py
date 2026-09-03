@@ -5,9 +5,8 @@ import ipaddress
 import json
 import re
 import subprocess
-from pathlib import Path
-from pathlib import PurePosixPath
-from typing import Any, Iterable
+from pathlib import Path, PurePosixPath
+from typing import Any, Callable, Iterable
 from urllib.parse import parse_qs, urlparse
 
 
@@ -24,6 +23,19 @@ STAGES = (
     ("execute", "Execute", "execute"),
 )
 
+RUNNER_TYPES = {
+    "syntax": "compiler",
+    "semantic": "compiler",
+    "relop": "compiler",
+    "preparation": "pass",
+    "initial-optimize": "pass",
+    "partial-queries": "pass",
+    "final-optimize": "pass",
+    "physical-plan": "physical",
+    "serialize-native-boundary": "boundary",
+    "execute": "execute",
+}
+
 EVIDENCE_KINDS = {
     "OBSERVED",
     "TRANSFORMED",
@@ -31,6 +43,10 @@ EVIDENCE_KINDS = {
     "NO_OP",
     "ESTIMATED",
 }
+NO_OP_KINDS = {"NO_OP", "SCHEDULED_NO_OP"}
+LANGUAGES = {"Managed", "C++", "Rust"}
+HEAP_STATES = {"live", "mutated", "released"}
+COMPONENT_STATES = {"active", "waiting", "not-created"}
 
 
 class ModelError(ValueError):
@@ -42,14 +58,12 @@ def validate_cluster_uri(value: str, location: str = "cluster URI") -> None:
         raise ModelError(f"{location} must be a non-empty string.")
     if any(character.isspace() for character in value):
         raise ModelError(f"{location} must not contain whitespace.")
-
     try:
         parsed = urlparse(value)
         hostname = parsed.hostname
         parsed.port
     except ValueError as exc:
         raise ModelError(f"{location} is not a valid absolute URI: {exc}") from exc
-
     scheme = parsed.scheme.lower()
     if scheme not in {"http", "https"} or not parsed.netloc or hostname is None:
         raise ModelError(
@@ -61,7 +75,6 @@ def validate_cluster_uri(value: str, location: str = "cluster URI") -> None:
         raise ModelError(f"{location} contains an empty port.")
     if scheme == "https":
         return
-
     normalized_host = hostname.lower()
     if normalized_host == "localhost":
         return
@@ -98,13 +111,13 @@ def load_model(path: Path) -> dict[str, Any]:
     return value
 
 
-def _require_object(value: Any, location: str) -> dict[str, Any]:
+def _object(value: Any, location: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ModelError(f"{location} must be an object.")
     return value
 
 
-def _require_list(value: Any, location: str, *, nonempty: bool = False) -> list[Any]:
+def _list(value: Any, location: str, *, nonempty: bool = False) -> list[Any]:
     if not isinstance(value, list):
         raise ModelError(f"{location} must be an array.")
     if nonempty and not value:
@@ -120,16 +133,54 @@ def _text(value: Any, location: str, *, allow_empty: bool = False) -> str:
     return value
 
 
-def _require_keys(value: dict[str, Any], keys: Iterable[str], location: str) -> None:
-    missing = [key for key in keys if key not in value]
+def _identifier(value: Any, location: str) -> str:
+    identifier = _text(value, location)
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]*", identifier):
+        raise ModelError(f"{location} must be a lowercase identifier.")
+    return identifier
+
+
+def _boolean(value: Any, location: str) -> bool:
+    if not isinstance(value, bool):
+        raise ModelError(f"{location} must be a boolean.")
+    return value
+
+
+def _integer(value: Any, location: str, *, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ModelError(f"{location} must be an integer of at least {minimum}.")
+    return value
+
+
+def _shape(
+    value: Any,
+    required: Iterable[str],
+    location: str,
+    optional: Iterable[str] = (),
+) -> dict[str, Any]:
+    result = _object(value, location)
+    required_set = set(required)
+    missing = sorted(required_set - set(result))
     if missing:
         raise ModelError(f"{location} is missing required fields: {', '.join(missing)}.")
-
-
-def _reject_extra(value: dict[str, Any], allowed: Iterable[str], location: str) -> None:
-    extras = sorted(set(value) - set(allowed))
+    extras = sorted(set(result) - required_set - set(optional))
     if extras:
         raise ModelError(f"{location} contains unsupported fields: {', '.join(extras)}.")
+    return result
+
+
+def _unique(
+    values: list[Any],
+    key: Callable[[Any], Any],
+    location: str,
+    description: str,
+) -> None:
+    seen: set[Any] = set()
+    for index, value in enumerate(values):
+        item = key(value)
+        if item in seen:
+            raise ModelError(f"{location}[{index}] repeats {description} '{item}'.")
+        seen.add(item)
 
 
 def is_authorized_source_remote(remote: str, project: str) -> bool:
@@ -141,12 +192,20 @@ def is_authorized_source_remote(remote: str, project: str) -> bool:
     )
     if scp_match:
         return scp_match.group(1).lower() == project.lower()
-
     parsed = urlparse(normalized)
     segments = [segment for segment in parsed.path.split("/") if segment]
+    expected = ["msazure", project.lower(), "_git", "azure-kusto-service"]
     if parsed.scheme.lower() == "https" and parsed.hostname == "dev.azure.com":
+        return [segment.lower() for segment in segments] == expected
+    if (
+        parsed.scheme.lower() == "https"
+        and parsed.netloc.lower() == "msazure.visualstudio.com"
+        and not parsed.params
+        and not parsed.query
+        and not parsed.fragment
+    ):
         return [segment.lower() for segment in segments] == [
-            "msazure",
+            "defaultcollection",
             project.lower(),
             "_git",
             "azure-kusto-service",
@@ -193,7 +252,7 @@ def verify_source_workspace(workspace: Path, model: dict[str, Any]) -> None:
         if isinstance(value, dict):
             if {"url", "path", "start_line", "end_line", "commit"} <= set(value):
                 source_path = PurePosixPath(value["path"].lstrip("/"))
-                if ".." in source_path.parts:
+                if ".." in source_path.parts or source_path.is_absolute():
                     raise ModelError(f"{location}.path escapes the source workspace.")
                 git_path = source_path.as_posix()
                 if git_path not in line_counts:
@@ -222,200 +281,1260 @@ def verify_source_workspace(workspace: Path, model: dict[str, Any]) -> None:
 
 
 def validate_source_link(link_value: Any, head: str, project: str, location: str) -> None:
-    link = _require_object(link_value, location)
     required = ("label", "url", "path", "start_line", "end_line", "commit")
-    _require_keys(link, required, location)
-    _reject_extra(link, required, location)
+    link = _shape(link_value, required, location)
     _text(link["label"], f"{location}.label")
     source_path = _text(link["path"], f"{location}.path")
-    if not source_path.startswith("/"):
-        raise ModelError(f"{location}.path must start with '/'.")
+    source_parts = PurePosixPath(source_path)
+    if not source_path.startswith("/") or ".." in source_parts.parts:
+        raise ModelError(f"{location}.path must be an absolute repository path without '..'.")
     if link["commit"] != head:
         raise ModelError(f"{location}.commit must match source.workspace_head.")
-    start = link["start_line"]
-    end = link["end_line"]
-    if not isinstance(start, int) or not isinstance(end, int) or start < 1 or end < start:
+    start = _integer(link["start_line"], f"{location}.start_line", minimum=1)
+    end = _integer(link["end_line"], f"{location}.end_line", minimum=1)
+    if end < start:
         raise ModelError(f"{location} must contain a valid inclusive line range.")
 
     raw_url = _text(link["url"], f"{location}.url")
     parsed = urlparse(raw_url)
-    if parsed.scheme != "https" or parsed.netloc.lower() != "dev.azure.com":
-        raise ModelError(f"{location}.url must be an absolute Azure DevOps HTTPS URL.")
-    segments = [segment for segment in parsed.path.split("/") if segment]
-    if [segment.lower() for segment in segments] != [
-        "msazure",
-        project.lower(),
-        "_git",
-        "azure-kusto-service",
-    ]:
+    canonical_path = f"/msazure/{project}/_git/Azure-Kusto-Service"
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "dev.azure.com"
+        or parsed.path != canonical_path
+        or parsed.fragment
+    ):
         raise ModelError(
-            f"{location}.url must use the canonical "
-            f"msazure/{project}/Azure-Kusto-Service route."
+            f"{location}.url must use the exact canonical Azure DevOps HTTPS route "
+            f"https://dev.azure.com{canonical_path}."
         )
-    query = parse_qs(parsed.query)
+    query = parse_qs(parsed.query, keep_blank_values=True)
     if query.get("version") != [f"GC{head}"]:
         raise ModelError(f"{location}.url must be pinned to source.workspace_head.")
     if query.get("path") != [source_path]:
         raise ModelError(f"{location}.url path must match the link path.")
-    if query.get("line") != [str(start)] or query.get("lineEnd") != [str(end)]:
+    if query.get("line") != [str(start)] or query.get("lineEnd") != [str(end + 1)]:
         raise ModelError(f"{location}.url line parameters must match the link range.")
 
 
-def _validate_links(
-    value: Any, head: str, project: str, location: str, *, nonempty: bool
+def _links(
+    value: Any,
+    head: str,
+    project: str,
+    location: str,
+    *,
+    nonempty: bool = True,
 ) -> list[Any]:
-    links = _require_list(value, location, nonempty=nonempty)
+    links = _list(value, location, nonempty=nonempty)
     for index, link in enumerate(links):
         validate_source_link(link, head, project, f"{location}[{index}]")
     return links
 
 
-def _validate_action(
-    action_value: Any, head: str, project: str, location: str, *, optimizer: bool
+def _evidence_kind(value: Any, location: str, mode: str) -> str:
+    if value not in EVIDENCE_KINDS:
+        raise ModelError(f"{location} is invalid or still pending.")
+    if mode == "EVIDENCE" and value == "ESTIMATED":
+        raise ModelError(f"{location} cannot be ESTIMATED in EVIDENCE mode.")
+    if mode == "ESTIMATED" and value not in {"ESTIMATED", "NO_OP"}:
+        raise ModelError(f"{location} must be visibly ESTIMATED or NO_OP in ESTIMATED mode.")
+    return value
+
+
+def _validate_overview(value: Any, location: str) -> None:
+    keys = ("input", "output", "owner", "not_responsible", "handoff")
+    overview = _shape(value, keys, location)
+    for key in keys:
+        _text(overview[key], f"{location}.{key}")
+
+
+def _validate_table(
+    value: Any, head: str, project: str, location: str
 ) -> None:
-    action = _require_object(action_value, location)
-    required = (
-        "id",
-        "title",
-        "description",
-        "evidence_kind",
-        "before",
-        "after",
-        "source_links",
-    )
-    _require_keys(action, required, location)
-    allowed = required + ("traversal", "predicate", "applicability", "optimization")
-    _reject_extra(action, allowed, location)
-    for key in ("id", "title", "description"):
-        _text(action[key], f"{location}.{key}")
-    before = _text(action["before"], f"{location}.before", allow_empty=True)
-    after = _text(action["after"], f"{location}.after", allow_empty=True)
-    kind = action["evidence_kind"]
-    if kind not in EVIDENCE_KINDS:
-        raise ModelError(f"{location}.evidence_kind is invalid or still pending.")
-    _validate_links(
-        action["source_links"], head, project, f"{location}.source_links", nonempty=True
-    )
+    table = _shape(value, ("id", "title", "columns", "rows", "source_links"), location)
+    _identifier(table["id"], f"{location}.id")
+    _text(table["title"], f"{location}.title")
+    columns = _list(table["columns"], f"{location}.columns", nonempty=True)
+    for index, column in enumerate(columns):
+        _text(column, f"{location}.columns[{index}]")
+    if len(set(columns)) != len(columns):
+        raise ModelError(f"{location}.columns must be unique.")
+    rows = _list(table["rows"], f"{location}.rows", nonempty=True)
+    for index, row in enumerate(rows):
+        cells = _list(row, f"{location}.rows[{index}]")
+        if len(cells) != len(columns):
+            raise ModelError(f"{location}.rows[{index}] must match the column count.")
+        for cell_index, cell in enumerate(cells):
+            _text(cell, f"{location}.rows[{index}][{cell_index}]")
+    _links(table["source_links"], head, project, f"{location}.source_links")
 
-    if optimizer:
-        for key in ("predicate", "applicability", "optimization"):
-            _text(action.get(key), f"{location}.{key}")
-        traversal = _require_list(action.get("traversal"), f"{location}.traversal", nonempty=True)
-        for index, node in enumerate(traversal):
-            _text(node, f"{location}.traversal[{index}]")
-        if kind == "TRANSFORMED" and before == after:
-            raise ModelError(f"{location} claims TRANSFORMED but before and after are identical.")
-        if kind == "SCHEDULED_NO_OP" and before != after:
-            raise ModelError(f"{location} claims SCHEDULED_NO_OP but before and after differ.")
-        if kind not in {"TRANSFORMED", "SCHEDULED_NO_OP", "ESTIMATED"}:
+
+def _validate_additional_context(
+    value: Any, head: str, project: str, location: str
+) -> None:
+    context = _shape(value, ("summary", "tables"), location)
+    _text(context["summary"], f"{location}.summary")
+    tables = _list(context["tables"], f"{location}.tables", nonempty=True)
+    for index, table in enumerate(tables):
+        _validate_table(table, head, project, f"{location}.tables[{index}]")
+    _unique(tables, lambda item: item["id"], f"{location}.tables", "table id")
+
+
+def _validate_traversal(
+    value: Any, head: str, project: str, location: str
+) -> None:
+    traversal = _shape(value, ("nodes", "snapshots"), location)
+    nodes = _list(traversal["nodes"], f"{location}.nodes", nonempty=True)
+    node_ids: set[str] = set()
+    for index, node_value in enumerate(nodes):
+        node_location = f"{location}.nodes[{index}]"
+        node = _shape(
+            node_value, ("id", "label", "state", "source_links"), node_location
+        )
+        node_id = _identifier(node["id"], f"{node_location}.id")
+        if node_id in node_ids:
+            raise ModelError(f"{node_location}.id must be unique within the traversal.")
+        node_ids.add(node_id)
+        _text(node["label"], f"{node_location}.label")
+        _text(node["state"], f"{node_location}.state")
+        _links(node["source_links"], head, project, f"{node_location}.source_links")
+    snapshots = _list(
+        traversal["snapshots"], f"{location}.snapshots", nonempty=True
+    )
+    if len(snapshots) < 2:
+        raise ModelError(f"{location}.snapshots must contain at least two snapshots.")
+    signatures: set[tuple[str, str, str, str]] = set()
+    snapshot_ids: set[str] = set()
+    for index, snapshot_value in enumerate(snapshots):
+        snapshot_location = f"{location}.snapshots[{index}]"
+        snapshot = _shape(
+            snapshot_value,
+            (
+                "id",
+                "current",
+                "movement",
+                "return_value",
+                "next",
+            ),
+            snapshot_location,
+        )
+        snapshot_id = _identifier(snapshot["id"], f"{snapshot_location}.id")
+        if snapshot_id in snapshot_ids:
+            raise ModelError(f"{snapshot_location}.id must be unique.")
+        snapshot_ids.add(snapshot_id)
+        current = _identifier(
+            snapshot["current"], f"{snapshot_location}.current"
+        )
+        if current not in node_ids:
             raise ModelError(
-                f"{location} optimizer evidence must be TRANSFORMED, "
-                "SCHEDULED_NO_OP, or ESTIMATED."
+                f"{snapshot_location}.current must reference a declared traversal node."
             )
+        for key in ("movement", "return_value", "next"):
+            _text(snapshot[key], f"{snapshot_location}.{key}")
+        signature = tuple(
+            snapshot[key] for key in ("current", "movement", "return_value", "next")
+        )
+        if signature in signatures:
+            raise ModelError(f"{snapshot_location} duplicates another traversal snapshot.")
+        signatures.add(signature)
 
 
-def _validate_operator(node_value: Any, head: str, project: str, location: str) -> int:
-    node = _require_object(node_value, location)
-    required = ("operator_id", "name", "details", "source_links", "children")
-    _require_keys(node, required, location)
-    _reject_extra(node, required, location)
-    for key in ("operator_id", "name", "details"):
-        _text(node[key], f"{location}.{key}")
-    _validate_links(
-        node["source_links"], head, project, f"{location}.source_links", nonempty=True
+def _validate_artifact(
+    value: Any,
+    head: str,
+    project: str,
+    location: str,
+    *,
+    no_op: bool,
+) -> None:
+    artifact = _shape(
+        value,
+        ("title", "collapsed_by_default", "before", "after", "operators"),
+        location,
     )
-    children = _require_list(node["children"], f"{location}.children")
+    _text(artifact["title"], f"{location}.title")
+    _boolean(
+        artifact["collapsed_by_default"], f"{location}.collapsed_by_default"
+    )
+    before = _text(artifact["before"], f"{location}.before")
+    after = _text(artifact["after"], f"{location}.after")
+    operators = _list(
+        artifact["operators"], f"{location}.operators", nonempty=True
+    )
+    for index, operator_value in enumerate(operators):
+        operator_location = f"{location}.operators[{index}]"
+        operator = _shape(
+            operator_value,
+            ("id", "label", "state", "source_links"),
+            operator_location,
+        )
+        _identifier(operator["id"], f"{operator_location}.id")
+        _text(operator["label"], f"{operator_location}.label")
+        _text(operator["state"], f"{operator_location}.state")
+        _links(
+            operator["source_links"],
+            head,
+            project,
+            f"{operator_location}.source_links",
+        )
+    _unique(operators, lambda item: item["id"], f"{location}.operators", "operator id")
+    if no_op and before != after:
+        raise ModelError(f"{location} is a no-op artifact but before and after differ.")
+    if not no_op and before == after:
+        raise ModelError(f"{location} must show distinct before and after representations.")
+
+
+def _validate_runner_action(
+    value: Any,
+    head: str,
+    project: str,
+    mode: str,
+    location: str,
+    *,
+    require_pass_fields: bool = False,
+) -> None:
+    action = _shape(
+        value,
+        (
+            "id",
+            "title",
+            "evidence_kind",
+            "what",
+            "why",
+            "result",
+            "stack_effect",
+            "heap_effect",
+            "before",
+            "after",
+            "source_links",
+        ),
+        location,
+        optional=("traversal", "predicate", "applicability", "optimization"),
+    )
+    _identifier(action["id"], f"{location}.id")
+    for key in ("title", "what", "why", "result", "stack_effect", "heap_effect"):
+        _text(action[key], f"{location}.{key}")
+    _evidence_kind(action["evidence_kind"], f"{location}.evidence_kind", mode)
+    _text(action["before"], f"{location}.before", allow_empty=True)
+    _text(action["after"], f"{location}.after", allow_empty=True)
+    pass_fields = ("traversal", "predicate", "applicability", "optimization")
+    if require_pass_fields:
+        for key in pass_fields:
+            _text(action.get(key), f"{location}.{key}")
+    elif any(key in action for key in pass_fields):
+        raise ModelError(f"{location} contains pass-only fields outside a pass runner.")
+    _links(action["source_links"], head, project, f"{location}.source_links")
+
+
+def _validate_runner_snapshot(
+    value: Any, head: str, project: str, location: str
+) -> tuple[str, str, str, str]:
+    snapshot = _shape(
+        value,
+        (
+            "id",
+            "label",
+            "progress",
+            "current",
+            "movement",
+            "return_value",
+            "next",
+            "visible_state",
+            "source_links",
+        ),
+        location,
+    )
+    _identifier(snapshot["id"], f"{location}.id")
+    for key in (
+        "label",
+        "current",
+        "movement",
+        "return_value",
+        "next",
+        "visible_state",
+    ):
+        _text(snapshot[key], f"{location}.{key}")
+    progress = _integer(snapshot["progress"], f"{location}.progress")
+    if progress > 100:
+        raise ModelError(f"{location}.progress must not exceed 100.")
+    _links(snapshot["source_links"], head, project, f"{location}.source_links")
+    return tuple(
+        snapshot[key] for key in ("current", "movement", "return_value", "next")
+    )
+
+
+def _validate_experiment(
+    value: Any, head: str, project: str, location: str
+) -> None:
+    experiment = _shape(
+        value,
+        ("id", "title", "control", "options", "results", "source_links"),
+        location,
+    )
+    _identifier(experiment["id"], f"{location}.id")
+    _text(experiment["title"], f"{location}.title")
+    if experiment["control"] not in {"select", "toggle", "failure", "inspect", "scenario"}:
+        raise ModelError(f"{location}.control is not a supported interactive control.")
+    options = _list(experiment["options"], f"{location}.options", nonempty=True)
+    if len(options) < 2:
+        raise ModelError(f"{location}.options must contain at least two interactive choices.")
+    for index, option_value in enumerate(options):
+        option_location = f"{location}.options[{index}]"
+        option = _shape(option_value, ("id", "label"), option_location)
+        _identifier(option["id"], f"{option_location}.id")
+        _text(option["label"], f"{option_location}.label")
+    _unique(options, lambda item: item["id"], f"{location}.options", "option id")
+    option_ids = {item["id"] for item in options}
+    results = _list(experiment["results"], f"{location}.results", nonempty=True)
+    for index, result_value in enumerate(results):
+        result_location = f"{location}.results[{index}]"
+        result = _shape(result_value, ("option_id", "result"), result_location)
+        _identifier(result["option_id"], f"{result_location}.option_id")
+        if result["option_id"] not in option_ids:
+            raise ModelError(
+                f"{result_location}.option_id must reference an experiment option."
+            )
+        _text(result["result"], f"{result_location}.result")
+    _unique(
+        results,
+        lambda item: item["option_id"],
+        f"{location}.results",
+        "option result",
+    )
+    if {item["option_id"] for item in results} != option_ids:
+        raise ModelError(f"{location}.results must cover every experiment option.")
+    _links(experiment["source_links"], head, project, f"{location}.source_links")
+
+
+def _validate_mapping(
+    value: Any,
+    head: str,
+    project: str,
+    location: str,
+) -> None:
+    entries = _list(value, location)
+    for index, entry_value in enumerate(entries):
+        entry_location = f"{location}[{index}]"
+        entry = _shape(
+            entry_value, ("from", "to", "reason", "source_links"), entry_location
+        )
+        for key in ("from", "to", "reason"):
+            _text(entry[key], f"{entry_location}.{key}")
+        _links(entry["source_links"], head, project, f"{entry_location}.source_links")
+
+
+def _validate_compiler(
+    value: Any,
+    stage_id: str,
+    mode: str,
+    head: str,
+    project: str,
+    location: str,
+) -> None:
+    compiler = _shape(
+        value,
+        ("mode", "before_actions", "after_actions", "mapping"),
+        location,
+    )
+    expected_mode = {
+        "syntax": "syntax",
+        "semantic": "semantic",
+        "relop": "csl-to-relop",
+    }[stage_id]
+    if compiler["mode"] != expected_mode:
+        raise ModelError(f"{location}.mode must be '{expected_mode}' for {stage_id}.")
+    for key in ("before_actions", "after_actions"):
+        actions = _list(compiler[key], f"{location}.{key}", nonempty=True)
+        for index, action in enumerate(actions):
+            _validate_runner_action(
+                action, head, project, mode, f"{location}.{key}[{index}]"
+            )
+        _unique(actions, lambda item: item["id"], f"{location}.{key}", "action id")
+    _validate_mapping(
+        compiler["mapping"], head, project, f"{location}.mapping"
+    )
+    if stage_id in {"semantic", "relop"} and not compiler["mapping"]:
+        raise ModelError(f"{location}.mapping is required for {stage_id}.")
+
+
+def _validate_pass(
+    value: Any,
+    badge: str,
+    mode: str,
+    head: str,
+    project: str,
+    location: str,
+) -> None:
+    pass_data = _shape(
+        value,
+        (
+            "applicable_passes",
+            "cumulative_before",
+            "cumulative_after",
+            "additional_context_tables",
+        ),
+        location,
+    )
+    passes = _list(
+        pass_data["applicable_passes"],
+        f"{location}.applicable_passes",
+        nonempty=badge != "NO_OP",
+    )
+    if badge == "NO_OP" and passes:
+        raise ModelError(f"{location} must not list passes for an inapplicable NO_OP.")
+    for index, pass_value in enumerate(passes):
+        pass_location = f"{location}.applicable_passes[{index}]"
+        item = _shape(
+            pass_value,
+            (
+                "id",
+                "title",
+                "traversal",
+                "predicate",
+                "applicability",
+                "optimization",
+                "before",
+                "after",
+                "outcome",
+                "source_links",
+            ),
+            pass_location,
+        )
+        _identifier(item["id"], f"{pass_location}.id")
+        for key in (
+            "title",
+            "traversal",
+            "predicate",
+            "applicability",
+            "optimization",
+            "before",
+            "after",
+        ):
+            _text(item[key], f"{pass_location}.{key}")
+        if item["outcome"] not in {
+            "OBSERVED",
+            "TRANSFORMED",
+            "SCHEDULED_NO_OP",
+            "ESTIMATED",
+        }:
+            raise ModelError(f"{pass_location}.outcome is invalid for an applicable pass.")
+        if mode == "EVIDENCE" and item["outcome"] == "ESTIMATED":
+            raise ModelError(
+                f"{pass_location}.outcome cannot be ESTIMATED in EVIDENCE mode."
+            )
+        if item["outcome"] == "TRANSFORMED" and item["before"] == item["after"]:
+            raise ModelError(
+                f"{pass_location} claims TRANSFORMED but before and after are identical."
+            )
+        if item["outcome"] == "SCHEDULED_NO_OP" and item["before"] != item["after"]:
+            raise ModelError(
+                f"{pass_location} claims SCHEDULED_NO_OP but before and after differ."
+            )
+        _links(item["source_links"], head, project, f"{pass_location}.source_links")
+    _unique(passes, lambda item: item["id"], f"{location}.applicable_passes", "pass id")
+    outcomes = {item["outcome"] for item in passes}
+    if badge == "TRANSFORMED" and "TRANSFORMED" not in outcomes:
+        raise ModelError(f"{location} does not contain a transformed pass.")
+    if badge == "SCHEDULED_NO_OP" and outcomes != {"SCHEDULED_NO_OP"}:
+        raise ModelError(f"{location} scheduled-no-op outcome is inconsistent.")
+    if badge == "ESTIMATED" and outcomes != {"ESTIMATED"}:
+        raise ModelError(f"{location} estimated outcome is inconsistent.")
+    if badge == "OBSERVED" and outcomes != {"OBSERVED"}:
+        raise ModelError(f"{location} observed outcome is inconsistent.")
+    before = _text(pass_data["cumulative_before"], f"{location}.cumulative_before")
+    after = _text(pass_data["cumulative_after"], f"{location}.cumulative_after")
+    if badge == "TRANSFORMED" and before == after:
+        raise ModelError(f"{location} transformed cumulative artifacts are identical.")
+    if badge in NO_OP_KINDS and before != after:
+        raise ModelError(f"{location} no-op cumulative artifacts differ.")
+    tables = _list(
+        pass_data["additional_context_tables"],
+        f"{location}.additional_context_tables",
+        nonempty=True,
+    )
+    for index, table in enumerate(tables):
+        _validate_table(
+            table, head, project, f"{location}.additional_context_tables[{index}]"
+        )
+
+
+def _validate_schema_fields(value: Any, location: str) -> None:
+    fields = _list(value, location, nonempty=True)
+    for index, field_value in enumerate(fields):
+        field_location = f"{location}[{index}]"
+        field = _shape(
+            field_value, ("name", "type", "nullable", "description"), field_location
+        )
+        for key in ("name", "type", "description"):
+            _text(field[key], f"{field_location}.{key}")
+        _boolean(field["nullable"], f"{field_location}.nullable")
+    _unique(fields, lambda item: item["name"], location, "field name")
+
+
+def _validate_remote_metadata(
+    value: Any, head: str, project: str, location: str
+) -> None:
+    metadata = _shape(
+        value,
+        ("applicable", "cluster", "database", "endpoint", "reason", "source_links"),
+        location,
+    )
+    applicable = _boolean(metadata["applicable"], f"{location}.applicable")
+    for key in ("cluster", "database", "endpoint"):
+        _text(metadata[key], f"{location}.{key}", allow_empty=not applicable)
+    reason = _text(metadata["reason"], f"{location}.reason", allow_empty=applicable)
+    if applicable and reason:
+        raise ModelError(f"{location}.reason must be empty when remote metadata applies.")
+    _links(metadata["source_links"], head, project, f"{location}.source_links")
+
+
+def _validate_operator(
+    value: Any,
+    head: str,
+    project: str,
+    location: str,
+    ids: set[str],
+    node_ids: set[str],
+) -> int:
+    operator = _shape(
+        value,
+        (
+            "operator_id",
+            "node_id",
+            "name",
+            "details",
+            "logical_operator_ids",
+            "input_schema",
+            "output_schema",
+            "key_indexes",
+            "execution_eligibility",
+            "rust_eligibility",
+            "target_scope",
+            "remote_metadata",
+            "source_links",
+            "children",
+        ),
+        location,
+    )
+    operator_id = _identifier(operator["operator_id"], f"{location}.operator_id")
+    node_id = _identifier(operator["node_id"], f"{location}.node_id")
+    if operator_id in ids:
+        raise ModelError(f"{location}.operator_id must be globally unique.")
+    if node_id in node_ids:
+        raise ModelError(f"{location}.node_id must be globally unique.")
+    ids.add(operator_id)
+    node_ids.add(node_id)
+    for key in ("name", "details", "execution_eligibility", "rust_eligibility", "target_scope"):
+        _text(operator[key], f"{location}.{key}")
+    logical_ids = _list(
+        operator["logical_operator_ids"],
+        f"{location}.logical_operator_ids",
+        nonempty=True,
+    )
+    for index, logical_id in enumerate(logical_ids):
+        _identifier(logical_id, f"{location}.logical_operator_ids[{index}]")
+    _validate_schema_fields(operator["input_schema"], f"{location}.input_schema")
+    _validate_schema_fields(operator["output_schema"], f"{location}.output_schema")
+    indexes = _list(operator["key_indexes"], f"{location}.key_indexes")
+    for index, key_index in enumerate(indexes):
+        _integer(key_index, f"{location}.key_indexes[{index}]")
+    if len(set(indexes)) != len(indexes):
+        raise ModelError(f"{location}.key_indexes must be unique.")
+    _validate_remote_metadata(
+        operator["remote_metadata"], head, project, f"{location}.remote_metadata"
+    )
+    _links(operator["source_links"], head, project, f"{location}.source_links")
+    children = _list(operator["children"], f"{location}.children")
     return 1 + sum(
-        _validate_operator(child, head, project, f"{location}.children[{index}]")
+        _validate_operator(
+            child,
+            head,
+            project,
+            f"{location}.children[{index}]",
+            ids,
+            node_ids,
+        )
         for index, child in enumerate(children)
     )
 
 
-def _validate_frame(frame_value: Any, head: str, project: str, location: str) -> None:
-    frame = _require_object(frame_value, location)
-    _require_keys(frame, ("language", "frame", "source_links"), location)
-    _reject_extra(frame, ("language", "frame", "source_links"), location)
-    if frame["language"] not in {"Managed", "C++", "Rust"}:
-        raise ModelError(f"{location}.language is invalid.")
-    _text(frame["frame"], f"{location}.frame")
-    _validate_links(
-        frame["source_links"], head, project, f"{location}.source_links", nonempty=True
+def _validate_physical(
+    value: Any,
+    plan_count: int,
+    mode: str,
+    head: str,
+    project: str,
+    location: str,
+) -> set[str]:
+    physical = _shape(
+        value,
+        (
+            "input_contract",
+            "full_plan",
+            "logical_to_physical",
+        ),
+        location,
+        optional=("raw_plan_sections",),
+    )
+    contract = _shape(
+        physical["input_contract"],
+        ("title", "collapsible", "fields", "source_links"),
+        f"{location}.input_contract",
+    )
+    _text(contract["title"], f"{location}.input_contract.title")
+    if _boolean(
+        contract["collapsible"], f"{location}.input_contract.collapsible"
+    ) is not True:
+        raise ModelError(f"{location}.input_contract.collapsible must be exactly true.")
+    _validate_schema_fields(contract["fields"], f"{location}.input_contract.fields")
+    _links(
+        contract["source_links"],
+        head,
+        project,
+        f"{location}.input_contract.source_links",
+    )
+    full_plan = _shape(
+        physical["full_plan"],
+        ("complete", "operator_count", "roots"),
+        f"{location}.full_plan",
+    )
+    complete = _boolean(full_plan["complete"], f"{location}.full_plan.complete")
+    if mode == "EVIDENCE" and not complete:
+        raise ModelError("EVIDENCE mode requires a complete full physical plan tree.")
+    if mode == "ESTIMATED" and complete:
+        raise ModelError("ESTIMATED mode must not claim a complete physical plan.")
+    expected_count = _integer(
+        full_plan["operator_count"], f"{location}.full_plan.operator_count", minimum=1
+    )
+    roots = _list(full_plan["roots"], f"{location}.full_plan.roots", nonempty=True)
+    operator_ids: set[str] = set()
+    node_ids: set[str] = set()
+    actual_count = sum(
+        _validate_operator(
+            root,
+            head,
+            project,
+            f"{location}.full_plan.roots[{index}]",
+            operator_ids,
+            node_ids,
+        )
+        for index, root in enumerate(roots)
+    )
+    if expected_count != actual_count or plan_count != actual_count:
+        raise ModelError(f"{location}.full_plan operator counts do not match its tree.")
+    mappings = _list(
+        physical["logical_to_physical"],
+        f"{location}.logical_to_physical",
+        nonempty=True,
+    )
+    for index, mapping_value in enumerate(mappings):
+        mapping_location = f"{location}.logical_to_physical[{index}]"
+        mapping = _shape(
+            mapping_value,
+            ("logical_id", "physical_operator_ids", "reason", "source_links"),
+            mapping_location,
+        )
+        _identifier(mapping["logical_id"], f"{mapping_location}.logical_id")
+        mapped_ids = _list(
+            mapping["physical_operator_ids"],
+            f"{mapping_location}.physical_operator_ids",
+            nonempty=True,
+        )
+        for mapped_index, mapped_id in enumerate(mapped_ids):
+            _identifier(
+                mapped_id,
+                f"{mapping_location}.physical_operator_ids[{mapped_index}]",
+            )
+        if not set(mapped_ids) <= operator_ids:
+            raise ModelError(
+                f"{mapping_location}.physical_operator_ids references an absent operator."
+            )
+        _text(mapping["reason"], f"{mapping_location}.reason")
+        _links(
+            mapping["source_links"],
+            head,
+            project,
+            f"{mapping_location}.source_links",
+        )
+    for index, section_value in enumerate(physical.get("raw_plan_sections", [])):
+        section_location = f"{location}.raw_plan_sections[{index}]"
+        section = _shape(
+            section_value,
+            (
+                "title",
+                "content",
+                "sanitized",
+                "contains_proprietary_data",
+                "digest_sha256",
+                "source_links",
+            ),
+            section_location,
+        )
+        _text(section["title"], f"{section_location}.title")
+        _text(section["content"], f"{section_location}.content")
+        if section["sanitized"] is not True or section["contains_proprietary_data"] is not False:
+            raise ModelError(
+                f"{section_location} must be sanitized and contain no proprietary data."
+            )
+        if not re.fullmatch(
+            r"[0-9a-f]{64}", _text(section["digest_sha256"], f"{section_location}.digest_sha256")
+        ):
+            raise ModelError(f"{section_location}.digest_sha256 must be a SHA-256 digest.")
+        _links(
+            section["source_links"], head, project, f"{section_location}.source_links"
+        )
+    return operator_ids
+
+
+def _validate_representation(
+    value: Any, head: str, project: str, location: str
+) -> None:
+    representation = _shape(
+        value, ("label", "content", "source_links"), location
+    )
+    _text(representation["label"], f"{location}.label")
+    _text(representation["content"], f"{location}.content")
+    _links(
+        representation["source_links"], head, project, f"{location}.source_links"
     )
 
 
-def _validate_heap_zone(zone_value: Any, head: str, project: str, location: str) -> None:
-    zone = _require_object(zone_value, location)
-    required = ("zone", "language", "state", "details", "evidence_basis", "source_links")
-    _require_keys(zone, required, location)
-    _reject_extra(zone, required, location)
-    for key in ("zone", "details", "evidence_basis"):
-        _text(zone[key], f"{location}.{key}")
-    if zone["language"] not in {"Managed", "C++", "Rust"}:
-        raise ModelError(f"{location}.language is invalid.")
-    if zone["state"] not in {"borrowed", "owned", "released"}:
-        raise ModelError(f"{location}.state is invalid.")
-    _validate_links(
-        zone["source_links"], head, project, f"{location}.source_links", nonempty=True
+def _validate_boundary(
+    value: Any, head: str, project: str, location: str
+) -> set[str]:
+    boundary = _shape(
+        value,
+        (
+            "lanes",
+            "representations",
+            "node_byte_ranges",
+            "selectable_views",
+            "context_toggle_comparisons",
+            "failure_injections",
+            "debugger_map",
+        ),
+        location,
     )
+    lanes = _list(boundary["lanes"], f"{location}.lanes", nonempty=True)
+    boundary_ids: set[str] = set()
+    lane_ids: set[str] = set()
+    for index, lane_value in enumerate(lanes):
+        lane_location = f"{location}.lanes[{index}]"
+        lane = _shape(
+            lane_value,
+            ("id", "boundary_id", "title", "input", "output", "source_links"),
+            lane_location,
+        )
+        lane_id = _identifier(lane["id"], f"{lane_location}.id")
+        if lane_id not in {"managed", "json", "utf-8", "native"}:
+            raise ModelError(f"{lane_location}.id is not a supported boundary lane.")
+        lane_ids.add(lane_id)
+        boundary_id = _identifier(
+            lane["boundary_id"], f"{lane_location}.boundary_id"
+        )
+        if boundary_id in boundary_ids:
+            raise ModelError(f"{lane_location}.boundary_id must be unique.")
+        boundary_ids.add(boundary_id)
+        for key in ("title", "input", "output"):
+            _text(lane[key], f"{lane_location}.{key}")
+        _links(lane["source_links"], head, project, f"{lane_location}.source_links")
+    if lane_ids != {"managed", "json", "utf-8", "native"} or len(lanes) != 4:
+        raise ModelError(
+            f"{location}.lanes must contain managed, json, utf-8, and native exactly once."
+        )
+    representations = _shape(
+        boundary["representations"],
+        ("object", "json", "bytes"),
+        f"{location}.representations",
+    )
+    for key in ("object", "json", "bytes"):
+        _validate_representation(
+            representations[key],
+            head,
+            project,
+            f"{location}.representations.{key}",
+        )
+    ranges = _list(
+        boundary["node_byte_ranges"],
+        f"{location}.node_byte_ranges",
+        nonempty=True,
+    )
+    for index, range_value in enumerate(ranges):
+        range_location = f"{location}.node_byte_ranges[{index}]"
+        byte_range = _shape(
+            range_value,
+            ("node_id", "start", "end", "description", "source_links"),
+            range_location,
+        )
+        _identifier(byte_range["node_id"], f"{range_location}.node_id")
+        start = _integer(byte_range["start"], f"{range_location}.start")
+        end = _integer(byte_range["end"], f"{range_location}.end")
+        if end <= start:
+            raise ModelError(f"{range_location} must be a non-empty half-open byte range.")
+        _text(byte_range["description"], f"{range_location}.description")
+        _links(
+            byte_range["source_links"],
+            head,
+            project,
+            f"{range_location}.source_links",
+        )
+    simple_specs = {
+        "selectable_views": ("id", "title", "content", "source_links"),
+        "context_toggle_comparisons": (
+            "id",
+            "title",
+            "without_context",
+            "with_context",
+            "source_links",
+        ),
+        "failure_injections": (
+            "id",
+            "title",
+            "injection",
+            "expected_failure",
+            "source_links",
+        ),
+        "debugger_map": (
+            "id",
+            "boundary_id",
+            "managed_location",
+            "native_location",
+            "source_links",
+        ),
+    }
+    for field, keys in simple_specs.items():
+        items = _list(boundary[field], f"{location}.{field}", nonempty=True)
+        for index, item_value in enumerate(items):
+            item_location = f"{location}.{field}[{index}]"
+            item = _shape(item_value, keys, item_location)
+            for key in keys[:-1]:
+                if key in {"id", "boundary_id"}:
+                    _identifier(item[key], f"{item_location}.{key}")
+                else:
+                    _text(item[key], f"{item_location}.{key}")
+            if field == "debugger_map" and item["boundary_id"] not in boundary_ids:
+                raise ModelError(
+                    f"{item_location}.boundary_id references an absent boundary."
+                )
+            _links(item["source_links"], head, project, f"{item_location}.source_links")
+        _unique(items, lambda item: item["id"], f"{location}.{field}", "id")
+    return boundary_ids
 
 
-def _validate_component(component_value: Any, head: str, project: str, location: str) -> None:
-    component = _require_object(component_value, location)
-    required = (
-        "name",
-        "evidence_ref",
-        "role",
-        "pull_direction",
-        "data_direction",
-        "ownership_now",
-        "next_breakpoint",
-        "failure",
-        "cancellation",
-        "lifetime",
+def _validate_execute(
+    value: Any,
+    evidence_refs: set[str],
+    head: str,
+    project: str,
+    location: str,
+) -> None:
+    execute = _shape(
+        value,
+        (
+            "action_timeline",
+            "language_lanes",
+            "call_stack",
+            "heap_zones",
+            "components",
+            "scenarios",
+        ),
+        location,
+    )
+    timeline = _list(
+        execute["action_timeline"], f"{location}.action_timeline", nonempty=True
+    )
+    for index, event_value in enumerate(timeline):
+        event_location = f"{location}.action_timeline[{index}]"
+        event = _shape(
+            event_value,
+            (
+                "id",
+                "title",
+                "what",
+                "why",
+                "stack_effect",
+                "heap_effect",
+                "source_links",
+            ),
+            event_location,
+        )
+        _identifier(event["id"], f"{event_location}.id")
+        for key in ("title", "what", "why", "stack_effect", "heap_effect"):
+            _text(event[key], f"{event_location}.{key}")
+        _links(event["source_links"], head, project, f"{event_location}.source_links")
+    _unique(timeline, lambda item: item["id"], f"{location}.action_timeline", "event id")
+
+    lanes = _list(execute["language_lanes"], f"{location}.language_lanes", nonempty=True)
+    lane_languages: set[str] = set()
+    for index, lane_value in enumerate(lanes):
+        lane_location = f"{location}.language_lanes[{index}]"
+        lane = _shape(
+            lane_value, ("language", "role", "applicability", "source_links"), lane_location
+        )
+        if lane["language"] not in LANGUAGES:
+            raise ModelError(f"{lane_location}.language is invalid.")
+        lane_languages.add(lane["language"])
+        _text(lane["role"], f"{lane_location}.role")
+        _text(lane["applicability"], f"{lane_location}.applicability")
+        _links(lane["source_links"], head, project, f"{lane_location}.source_links")
+    if len(lane_languages) != len(lanes):
+        raise ModelError(f"{location}.language_lanes must not repeat a language.")
+
+    stack = _list(execute["call_stack"], f"{location}.call_stack", nonempty=True)
+    for index, frame_value in enumerate(stack):
+        frame_location = f"{location}.call_stack[{index}]"
+        frame = _shape(
+            frame_value,
+            ("position", "language", "frame", "what", "why", "source_links"),
+            frame_location,
+        )
+        if frame["position"] != index:
+            raise ModelError(
+                f"{frame_location}.position must preserve the top-first call-stack order."
+            )
+        if frame["language"] not in lane_languages:
+            raise ModelError(f"{frame_location}.language lacks an applicable language lane.")
+        for key in ("frame", "what", "why"):
+            _text(frame[key], f"{frame_location}.{key}")
+        _links(frame["source_links"], head, project, f"{frame_location}.source_links")
+
+    zones = _list(execute["heap_zones"], f"{location}.heap_zones")
+    for index, zone_value in enumerate(zones):
+        zone_location = f"{location}.heap_zones[{index}]"
+        zone = _shape(
+            zone_value,
+            (
+                "id",
+                "language",
+                "state",
+                "what",
+                "why",
+                "owner",
+                "source_links",
+            ),
+            zone_location,
+        )
+        _identifier(zone["id"], f"{zone_location}.id")
+        if zone["language"] not in lane_languages:
+            raise ModelError(f"{zone_location}.language lacks an applicable language lane.")
+        if zone["state"] not in HEAP_STATES:
+            raise ModelError(f"{zone_location}.state is invalid.")
+        for key in ("what", "why", "owner"):
+            _text(zone[key], f"{zone_location}.{key}")
+        _links(zone["source_links"], head, project, f"{zone_location}.source_links")
+
+    components = _list(
+        execute["components"], f"{location}.components", nonempty=True
+    )
+    for index, component_value in enumerate(components):
+        component_location = f"{location}.components[{index}]"
+        component = _shape(
+            component_value,
+            (
+                "id",
+                "name",
+                "evidence_ref",
+                "state",
+                "role",
+                "pull_direction",
+                "data_direction",
+                "ownership",
+                "breakpoint",
+                "source_links",
+            ),
+            component_location,
+        )
+        _identifier(component["id"], f"{component_location}.id")
+        _identifier(
+            component["evidence_ref"], f"{component_location}.evidence_ref"
+        )
+        for key in (
+            "name",
+            "role",
+            "pull_direction",
+            "data_direction",
+            "ownership",
+            "breakpoint",
+        ):
+            _text(component[key], f"{component_location}.{key}")
+        if component["evidence_ref"] not in evidence_refs:
+            raise ModelError(
+                f"{component_location}.evidence_ref references an operator or boundary "
+                "absent from this walkthrough."
+            )
+        if component["state"] not in COMPONENT_STATES:
+            raise ModelError(f"{component_location}.state is invalid.")
+        _links(
+            component["source_links"],
+            head,
+            project,
+            f"{component_location}.source_links",
+        )
+    _unique(components, lambda item: item["id"], f"{location}.components", "component id")
+
+    scenarios = _list(execute["scenarios"], f"{location}.scenarios", nonempty=True)
+    scenario_types: set[str] = set()
+    for index, scenario_value in enumerate(scenarios):
+        scenario_location = f"{location}.scenarios[{index}]"
+        scenario = _shape(
+            scenario_value,
+            ("type", "trigger", "behavior", "ownership_effect", "source_links"),
+            scenario_location,
+        )
+        if scenario["type"] not in {"failure", "cancellation", "memory", "lifetime"}:
+            raise ModelError(f"{scenario_location}.type is invalid.")
+        scenario_types.add(scenario["type"])
+        for key in ("trigger", "behavior", "ownership_effect"):
+            _text(scenario[key], f"{scenario_location}.{key}")
+        _links(scenario["source_links"], head, project, f"{scenario_location}.source_links")
+    if scenario_types != {"failure", "cancellation", "memory", "lifetime"}:
+        raise ModelError(
+            f"{location}.scenarios must cover failure, cancellation, memory, and lifetime."
+        )
+
+
+def _validate_runner(
+    value: Any,
+    stage_id: str,
+    badge: str,
+    stage_no_op: bool,
+    plan_count: int,
+    mode: str,
+    head: str,
+    project: str,
+    location: str,
+    evidence_refs: set[str],
+) -> None:
+    common = (
+        "type",
+        "title",
+        "actions",
+        "snapshots",
+        "experiments",
+        "no_op",
         "source_links",
     )
-    _require_keys(component, required, location)
-    _reject_extra(component, required, location)
-    for key in required[:-1]:
-        _text(component[key], f"{location}.{key}")
-    _validate_links(
-        component["source_links"], head, project, f"{location}.source_links", nonempty=True
+    runner_type = RUNNER_TYPES[stage_id]
+    runner = _shape(value, common + (runner_type,), location)
+    if runner["type"] != runner_type:
+        raise ModelError(f"{location}.type must be '{runner_type}' for {stage_id}.")
+    required_gate = stage_no_op or badge in NO_OP_KINDS
+    title = _text(runner["title"], f"{location}.title")
+    if not re.fullmatch(r"Run the .+ yourself", title):
+        raise ModelError(f"{location}.title must follow 'Run the ... yourself'.")
+    if runner_type not in title.lower():
+        raise ModelError(
+            f"{location}.title must identify its '{runner_type}' runner type."
+        )
+    actions = _list(runner["actions"], f"{location}.actions", nonempty=True)
+    for index, action in enumerate(actions):
+        _validate_runner_action(
+            action,
+            head,
+            project,
+            mode,
+            f"{location}.actions[{index}]",
+            require_pass_fields=runner_type == "pass",
+        )
+        if required_gate and action["before"] != action["after"]:
+            raise ModelError(
+                f"{location}.actions[{index}] is gated as a no-op but changes its artifact."
+            )
+        if required_gate and action["evidence_kind"] != badge:
+            raise ModelError(
+                f"{location}.actions[{index}].evidence_kind must match its no-op outcome."
+            )
+    _unique(actions, lambda item: item["id"], f"{location}.actions", "action id")
+    snapshots = _list(runner["snapshots"], f"{location}.snapshots", nonempty=True)
+    if len(snapshots) < 2:
+        raise ModelError(f"{location}.snapshots must contain at least two snapshots.")
+    if len(actions) > len(snapshots):
+        raise ModelError(
+            f"{location}.snapshots must make every runner action reachable."
+        )
+    signatures = {
+        _validate_runner_snapshot(
+            snapshot, head, project, f"{location}.snapshots[{index}]"
+        )
+        for index, snapshot in enumerate(snapshots)
+    }
+    if len(signatures) != len(snapshots):
+        raise ModelError(f"{location}.snapshots must be distinct.")
+    _unique(snapshots, lambda item: item["id"], f"{location}.snapshots", "snapshot id")
+    experiments = _list(
+        runner["experiments"], f"{location}.experiments", nonempty=True
     )
+    for index, experiment in enumerate(experiments):
+        _validate_experiment(
+            experiment, head, project, f"{location}.experiments[{index}]"
+        )
+    _unique(
+        experiments,
+        lambda item: item["id"],
+        f"{location}.experiments",
+        "experiment id",
+    )
+    no_op = _shape(
+        runner["no_op"],
+        ("enabled", "gates", "reasons"),
+        f"{location}.no_op",
+    )
+    enabled = _boolean(no_op["enabled"], f"{location}.no_op.enabled")
+    gates = _list(
+        no_op["gates"], f"{location}.no_op.gates", nonempty=required_gate
+    )
+    reasons = _list(
+        no_op["reasons"], f"{location}.no_op.reasons", nonempty=required_gate
+    )
+    for index, gate in enumerate(gates):
+        _text(gate, f"{location}.no_op.gates[{index}]")
+    for index, reason in enumerate(reasons):
+        _text(reason, f"{location}.no_op.reasons[{index}]")
+    if enabled != required_gate:
+        raise ModelError(f"{location}.no_op.enabled does not match the substep/stage outcome.")
+    if not required_gate and (gates or reasons):
+        raise ModelError(
+            f"{location}.no_op gates/reasons are only valid when the gate is active."
+        )
+    _links(runner["source_links"], head, project, f"{location}.source_links")
+
+    if runner_type == "compiler":
+        _validate_compiler(
+            runner["compiler"],
+            stage_id,
+            mode,
+            head,
+            project,
+            f"{location}.compiler",
+        )
+        if required_gate:
+            compiler_actions = (
+                runner["compiler"]["before_actions"] + runner["compiler"]["after_actions"]
+            )
+            for index, action in enumerate(compiler_actions):
+                if action["evidence_kind"] != badge or action["before"] != action["after"]:
+                    raise ModelError(
+                        f"{location}.compiler action {index} contradicts its no-op outcome."
+                    )
+    elif runner_type == "pass":
+        _validate_pass(
+            runner["pass"], badge, mode, head, project, f"{location}.pass"
+        )
+    elif runner_type == "physical":
+        evidence_refs.update(
+            _validate_physical(
+                runner["physical"],
+                plan_count,
+                mode,
+                head,
+                project,
+                f"{location}.physical",
+            )
+        )
+    elif runner_type == "boundary":
+        evidence_refs.update(
+            _validate_boundary(
+                runner["boundary"], head, project, f"{location}.boundary"
+            )
+        )
+    else:
+        _validate_execute(
+            runner["execute"],
+            evidence_refs,
+            head,
+            project,
+            f"{location}.execute",
+        )
 
 
-def _validate_timeline(event_value: Any, head: str, project: str, location: str) -> None:
-    event = _require_object(event_value, location)
+def _validate_substep(
+    value: Any,
+    stage_id: str,
+    stage_no_op: bool,
+    plan_count: int,
+    mode: str,
+    head: str,
+    project: str,
+    location: str,
+    evidence_refs: set[str],
+) -> str:
     required = (
         "id",
         "title",
-        "user_event",
-        "description",
-        "call_stack",
-        "heap_zones",
-        "components",
+        "behavior",
+        "change_badge",
+        "summary",
+        "what_happens",
+        "why",
+        "debug",
+        "next",
+        "method_path",
         "source_links",
+        "traversal",
+        "artifact",
+        "runner",
     )
-    _require_keys(event, required, location)
-    _reject_extra(event, required, location)
-    for key in ("id", "title", "user_event", "description"):
-        _text(event[key], f"{location}.{key}")
-    for index, frame in enumerate(
-        _require_list(event["call_stack"], f"{location}.call_stack", nonempty=True)
+    substep = _shape(value, required, location)
+    _identifier(substep["id"], f"{location}.id")
+    for key in (
+        "title",
+        "behavior",
+        "summary",
+        "what_happens",
+        "why",
+        "debug",
+        "next",
     ):
-        _validate_frame(frame, head, project, f"{location}.call_stack[{index}]")
-    for index, zone in enumerate(_require_list(event["heap_zones"], f"{location}.heap_zones")):
-        _validate_heap_zone(zone, head, project, f"{location}.heap_zones[{index}]")
-    for index, component in enumerate(
-        _require_list(event["components"], f"{location}.components", nonempty=True)
-    ):
-        _validate_component(component, head, project, f"{location}.components[{index}]")
-    _validate_links(
-        event["source_links"], head, project, f"{location}.source_links", nonempty=True
+        _text(substep[key], f"{location}.{key}")
+    method_path = _list(
+        substep["method_path"], f"{location}.method_path", nonempty=True
     )
+    for index, method in enumerate(method_path):
+        _text(method, f"{location}.method_path[{index}]")
+    badge = _evidence_kind(substep["change_badge"], f"{location}.change_badge", mode)
+    if stage_no_op and badge not in NO_OP_KINDS:
+        raise ModelError(f"{location}.change_badge must be a no-op when its stage is a no-op.")
+    _links(substep["source_links"], head, project, f"{location}.source_links")
+    _validate_traversal(
+        substep["traversal"], head, project, f"{location}.traversal"
+    )
+    _validate_artifact(
+        substep["artifact"],
+        head,
+        project,
+        f"{location}.artifact",
+        no_op=badge in NO_OP_KINDS,
+    )
+    _validate_runner(
+        substep["runner"],
+        stage_id,
+        badge,
+        stage_no_op,
+        plan_count,
+        mode,
+        head,
+        project,
+        f"{location}.runner",
+        evidence_refs,
+    )
+    return badge
+
+
+def _validate_network_beacon(value: Any, project: str, location: str) -> None:
+    beacon = _shape(value, ("state", "route", "purpose"), location)
+    if beacon["state"] not in {"ENABLED", "DISABLED"}:
+        raise ModelError(f"{location}.state must be ENABLED or DISABLED.")
+    route = _text(beacon["route"], f"{location}.route")
+    expected = f"https://dev.azure.com/msazure/{project}/_git/Azure-Kusto-Service"
+    if route != expected:
+        raise ModelError(f"{location}.route must be the canonical source repository route.")
+    purpose = _text(beacon["purpose"], f"{location}.purpose")
+    if "source" not in purpose.lower() or "navigation" not in purpose.lower():
+        raise ModelError(f"{location}.purpose must explicitly describe outbound source navigation.")
 
 
 def validate_complete_model(model: dict[str, Any]) -> None:
-    required = (
+    root_keys = (
         "schema_version",
         "model_state",
         "evidence_mode",
@@ -423,12 +1542,12 @@ def validate_complete_model(model: dict[str, Any]) -> None:
         "query",
         "source",
         "plan",
+        "network_beacon",
         "stages",
     )
-    _require_keys(model, required, "model")
-    _reject_extra(model, required, "model")
-    if model["schema_version"] != "1.0":
-        raise ModelError("model.schema_version must be '1.0'.")
+    _shape(model, root_keys, "model")
+    if model["schema_version"] != "2.0":
+        raise ModelError("model.schema_version must be '2.0'.")
     if model["model_state"] != "COMPLETE":
         raise ModelError("model.model_state must be COMPLETE before rendering.")
     mode = model["evidence_mode"]
@@ -440,22 +1559,23 @@ def validate_complete_model(model: dict[str, Any]) -> None:
     if mode == "EVIDENCE" and estimate_reason:
         raise ModelError("model.estimate_reason must be empty in EVIDENCE mode.")
 
-    query = _require_object(model["query"], "model.query")
-    _require_keys(query, ("text", "cluster_uri", "database", "title", "slug"), "model.query")
-    _reject_extra(query, ("text", "cluster_uri", "database", "title", "slug"), "model.query")
+    query = _shape(
+        model["query"],
+        ("text", "cluster_uri", "database", "title", "slug"),
+        "model.query",
+    )
     for key in ("text", "cluster_uri", "database", "title", "slug"):
         _text(query[key], f"model.query.{key}")
     validate_cluster_uri(query["cluster_uri"], "model.query.cluster_uri")
-    expected_slug = query_slug(query["text"], query["cluster_uri"], query["database"])
-    if query["slug"] != expected_slug:
+    if query["slug"] != query_slug(
+        query["text"], query["cluster_uri"], query["database"]
+    ):
         raise ModelError("model.query.slug is not the stable query-derived slug.")
 
-    source = _require_object(model["source"], "model.source")
-    _require_keys(
-        source, ("organization", "project", "repository", "workspace_head"), "model.source"
-    )
-    _reject_extra(
-        source, ("organization", "project", "repository", "workspace_head"), "model.source"
+    source = _shape(
+        model["source"],
+        ("organization", "project", "repository", "workspace_head"),
+        "model.source",
     )
     if source["organization"] != "msazure" or source["repository"] != "Azure-Kusto-Service":
         raise ModelError("model.source must target msazure/Azure-Kusto-Service.")
@@ -463,15 +1583,10 @@ def validate_complete_model(model: dict[str, Any]) -> None:
     head = _text(source["workspace_head"], "model.source.workspace_head")
     if not re.fullmatch(r"[0-9a-f]{40}", head):
         raise ModelError("model.source.workspace_head must be a lowercase 40-character commit.")
+    _validate_network_beacon(model["network_beacon"], project, "model.network_beacon")
 
-    plan = _require_object(model["plan"], "model.plan")
-    _require_keys(
-        plan,
-        ("tool", "collected_at_utc", "non_executing", "digest_sha256", "operator_count"),
-        "model.plan",
-    )
-    _reject_extra(
-        plan,
+    plan = _shape(
+        model["plan"],
         ("tool", "collected_at_utc", "non_executing", "digest_sha256", "operator_count"),
         "model.plan",
     )
@@ -482,34 +1597,28 @@ def validate_complete_model(model: dict[str, Any]) -> None:
     digest = _text(plan["digest_sha256"], "model.plan.digest_sha256", allow_empty=True)
     if mode == "EVIDENCE" and not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ModelError("EVIDENCE mode requires a SHA-256 plan digest.")
-    if not isinstance(plan["operator_count"], int) or plan["operator_count"] < 1:
-        raise ModelError("model.plan.operator_count must be a positive integer.")
+    plan_count = _integer(plan["operator_count"], "model.plan.operator_count", minimum=1)
 
-    stages = _require_list(model["stages"], "model.stages")
+    stages = _list(model["stages"], "model.stages")
     if len(stages) != len(STAGES):
         raise ModelError("model.stages must contain exactly ten stages.")
-
-    execution_refs: set[str] = set()
-
+    evidence_refs: set[str] = set()
     for index, ((expected_id, expected_title, expected_kind), stage_value) in enumerate(
         zip(STAGES, stages, strict=True)
     ):
         location = f"model.stages[{index}]"
-        stage = _require_object(stage_value, location)
-        required_stage = (
+        required = (
             "id",
             "order",
             "title",
             "kind",
-            "summary",
             "evidence_kind",
             "no_op_explanation",
             "source_links",
-            "actions",
+            "overview",
+            "substeps",
         )
-        _require_keys(stage, required_stage, location)
-        allowed_stage = required_stage + ("physical_plan", "boundaries", "timeline")
-        _reject_extra(stage, allowed_stage, location)
+        stage = _shape(stage_value, required, location, optional=("additional_context",))
         if (
             stage["id"] != expected_id
             or stage["title"] != expected_title
@@ -517,126 +1626,84 @@ def validate_complete_model(model: dict[str, Any]) -> None:
             or stage["order"] != index + 1
         ):
             raise ModelError(f"{location} does not match the required lifecycle order.")
-        _text(stage["summary"], f"{location}.summary")
-        evidence_kind = stage["evidence_kind"]
-        if evidence_kind not in EVIDENCE_KINDS:
-            raise ModelError(f"{location}.evidence_kind is invalid or still pending.")
-        if mode == "ESTIMATED" and evidence_kind not in {"ESTIMATED", "NO_OP"}:
-            raise ModelError(f"{location} must be visibly ESTIMATED or NO_OP in ESTIMATED mode.")
-        if mode == "EVIDENCE" and evidence_kind == "ESTIMATED":
-            raise ModelError(f"{location} cannot use ESTIMATED evidence in EVIDENCE mode.")
-        no_op = _text(
+        evidence_kind = _evidence_kind(
+            stage["evidence_kind"], f"{location}.evidence_kind", mode
+        )
+        stage_no_op = evidence_kind in NO_OP_KINDS
+        explanation = _text(
             stage["no_op_explanation"],
             f"{location}.no_op_explanation",
-            allow_empty=evidence_kind not in {"NO_OP", "SCHEDULED_NO_OP"},
+            allow_empty=not stage_no_op,
         )
-        if evidence_kind not in {"NO_OP", "SCHEDULED_NO_OP"} and no_op:
-            raise ModelError(f"{location}.no_op_explanation is only valid for no-op evidence.")
-        _validate_links(
-            stage["source_links"], head, project, f"{location}.source_links", nonempty=True
-        )
-        actions = _require_list(stage["actions"], f"{location}.actions")
-        for action_index, action in enumerate(actions):
-            _validate_action(
-                action,
+        if not stage_no_op and explanation:
+            raise ModelError(
+                f"{location}.no_op_explanation is only valid for no-op evidence."
+            )
+        _links(stage["source_links"], head, project, f"{location}.source_links")
+        _validate_overview(stage["overview"], f"{location}.overview")
+        if expected_kind == "optimizer":
+            if "additional_context" not in stage:
+                raise ModelError(f"{location}.additional_context is required for optimizer stages.")
+            _validate_additional_context(
+                stage["additional_context"],
                 head,
                 project,
-                f"{location}.actions[{action_index}]",
-                optimizer=expected_kind == "optimizer",
+                f"{location}.additional_context",
             )
-            if mode == "EVIDENCE" and action["evidence_kind"] == "ESTIMATED":
-                raise ModelError(
-                    f"{location}.actions[{action_index}] cannot be ESTIMATED in EVIDENCE mode."
-                )
-            if mode == "ESTIMATED" and action["evidence_kind"] != "ESTIMATED":
-                raise ModelError(
-                    f"{location}.actions[{action_index}] must be ESTIMATED in ESTIMATED mode."
-                )
-
-        if expected_kind in {"standard", "optimizer"} and evidence_kind not in {
-            "NO_OP",
-            "SCHEDULED_NO_OP",
-        } and not actions:
-            raise ModelError(f"{location} requires at least one query-specific action.")
-        if expected_kind == "optimizer" and actions:
-            action_kinds = {action["evidence_kind"] for action in actions}
-            derived_kind = (
+        elif "additional_context" in stage:
+            _validate_additional_context(
+                stage["additional_context"],
+                head,
+                project,
+                f"{location}.additional_context",
+            )
+        substeps = _list(stage["substeps"], f"{location}.substeps", nonempty=True)
+        badges = [
+            _validate_substep(
+                substep,
+                expected_id,
+                stage_no_op,
+                plan_count,
+                mode,
+                head,
+                project,
+                f"{location}.substeps[{substep_index}]",
+                evidence_refs,
+            )
+            for substep_index, substep in enumerate(substeps)
+        ]
+        _unique(substeps, lambda item: item["id"], f"{location}.substeps", "substep id")
+        badge_set = set(badges)
+        if evidence_kind == "OBSERVED" and badge_set != {"OBSERVED"}:
+            raise ModelError(
+                f"{location}.evidence_kind contradicts its substep change badges."
+            )
+        if evidence_kind == "TRANSFORMED" and "TRANSFORMED" not in badge_set:
+            raise ModelError(
+                f"{location}.evidence_kind contradicts its substep change badges."
+            )
+        if evidence_kind == "SCHEDULED_NO_OP" and badge_set != {"SCHEDULED_NO_OP"}:
+            raise ModelError(
+                f"{location}.evidence_kind contradicts its substep change badges."
+            )
+        if evidence_kind == "NO_OP" and badge_set != {"NO_OP"}:
+            raise ModelError(
+                f"{location}.evidence_kind contradicts its substep change badges."
+            )
+        if expected_kind == "optimizer":
+            derived = (
                 "ESTIMATED"
-                if action_kinds == {"ESTIMATED"}
+                if set(badges) == {"ESTIMATED"}
                 else "TRANSFORMED"
-                if "TRANSFORMED" in action_kinds
+                if "TRANSFORMED" in badges
                 else "SCHEDULED_NO_OP"
+                if set(badges) == {"SCHEDULED_NO_OP"}
+                else evidence_kind
             )
-            if evidence_kind != derived_kind:
+            if evidence_kind != derived:
                 raise ModelError(
-                    f"{location}.evidence_kind contradicts its optimizer action outcomes."
+                    f"{location}.evidence_kind contradicts its pass runner outcomes."
                 )
-        if expected_kind == "physical":
-            physical = _require_object(stage.get("physical_plan"), f"{location}.physical_plan")
-            _require_keys(physical, ("complete", "operator_count", "root"), f"{location}.physical_plan")
-            _reject_extra(
-                physical, ("complete", "operator_count", "root"), f"{location}.physical_plan"
-            )
-            count = _validate_operator(
-                physical["root"], head, project, f"{location}.physical_plan.root"
-            )
-            def collect_operator_ids(node: dict[str, Any]) -> None:
-                execution_refs.add(node["operator_id"])
-                for child in node["children"]:
-                    collect_operator_ids(child)
-
-            collect_operator_ids(physical["root"])
-            if physical["operator_count"] != count or plan["operator_count"] != count:
-                raise ModelError(f"{location}.physical_plan operator counts do not match its tree.")
-            if mode == "EVIDENCE" and physical["complete"] is not True:
-                raise ModelError("EVIDENCE mode requires a complete physical plan.")
-            if mode == "ESTIMATED" and physical["complete"] is not False:
-                raise ModelError("ESTIMATED mode must not claim that the physical plan is complete.")
-        elif "physical_plan" in stage:
-            raise ModelError(f"{location} must not contain physical_plan.")
-
-        if expected_kind == "serialization":
-            boundaries = _require_list(
-                stage.get("boundaries"),
-                f"{location}.boundaries",
-                nonempty=evidence_kind != "NO_OP",
-            )
-            if evidence_kind == "NO_OP" and boundaries:
-                raise ModelError(f"{location} is NO_OP but contains serialization boundaries.")
-            for boundary_index, boundary in enumerate(boundaries):
-                _validate_action(
-                    boundary,
-                    head,
-                    project,
-                    f"{location}.boundaries[{boundary_index}]",
-                    optimizer=False,
-                )
-                execution_refs.add(boundary["id"])
-                if mode == "EVIDENCE" and boundary["evidence_kind"] == "ESTIMATED":
-                    raise ModelError(
-                        f"{location}.boundaries[{boundary_index}] cannot be ESTIMATED "
-                        "in EVIDENCE mode."
-                    )
-                if mode == "ESTIMATED" and boundary["evidence_kind"] != "ESTIMATED":
-                    raise ModelError(
-                        f"{location}.boundaries[{boundary_index}] must be ESTIMATED "
-                        "in ESTIMATED mode."
-                    )
-        elif "boundaries" in stage:
-            raise ModelError(f"{location} must not contain boundaries.")
-
-        if expected_kind == "execute":
-            timeline = _require_list(stage.get("timeline"), f"{location}.timeline", nonempty=True)
-            for event_index, event in enumerate(timeline):
-                _validate_timeline(event, head, project, f"{location}.timeline[{event_index}]")
-                for component_index, component in enumerate(event["components"]):
-                    if component["evidence_ref"] not in execution_refs:
-                        raise ModelError(
-                            f"{location}.timeline[{event_index}].components[{component_index}] "
-                            "references an operator or boundary absent from this walkthrough."
-                        )
-        elif "timeline" in stage:
-            raise ModelError(f"{location} must not contain timeline.")
 
 
 def safe_json_for_html(value: Any) -> str:

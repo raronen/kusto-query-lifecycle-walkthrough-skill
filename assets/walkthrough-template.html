@@ -9,206 +9,296 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #08111f;
-      --panel: #101c2f;
-      --panel-2: #16243b;
-      --ink: #eef6ff;
-      --muted: #a9b9ce;
-      --line: #2c4260;
-      --cyan: #62d8f3;
-      --violet: #af8dff;
-      --green: #68dda8;
-      --amber: #ffc96b;
-      --red: #ff8e9e;
-      --shadow: 0 18px 60px rgb(0 0 0 / 28%);
+      --bg: #07111f;
+      --panel: #101d31;
+      --panel-2: #172740;
+      --panel-3: #0b1728;
+      --ink: #eef7ff;
+      --muted: #a7b9cf;
+      --line: #304966;
+      --cyan: #65dbf5;
+      --violet: #b79bff;
+      --green: #70e1af;
+      --amber: #ffd177;
+      --red: #ff91a0;
+      --blue: #79a9ff;
+      --shadow: 0 20px 70px rgb(0 0 0 / 30%);
+      --radius: 18px;
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
     body {
       margin: 0;
-      min-width: 280px;
+      min-width: 300px;
       background:
-        radial-gradient(circle at 80% 0, rgb(98 216 243 / 12%), transparent 28rem),
-        radial-gradient(circle at 10% 20%, rgb(175 141 255 / 10%), transparent 24rem),
+        radial-gradient(circle at 85% 0, rgb(101 219 245 / 12%), transparent 30rem),
+        radial-gradient(circle at 8% 24%, rgb(183 155 255 / 10%), transparent 26rem),
         var(--bg);
       color: var(--ink);
       font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     }
-    button, a { font: inherit; }
+    button, input, select { font: inherit; }
+    button, select { color: var(--ink); }
+    button { cursor: pointer; }
     a { color: var(--cyan); text-underline-offset: .18em; }
     a:hover { color: white; }
     :focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
-    .shell { width: min(1440px, 100%); margin: 0 auto; padding: clamp(1rem, 3vw, 3rem); }
+    h1, h2, h3, h4, h5 { line-height: 1.14; margin: 0 0 .65rem; }
+    h1 { max-width: 18ch; font-size: clamp(2rem, 5vw, 4.3rem); letter-spacing: -.045em; }
+    h2 { font-size: clamp(1.45rem, 3vw, 2.25rem); }
+    h3 { font-size: clamp(1.1rem, 2vw, 1.4rem); }
+    h4 { font-size: 1rem; }
+    p { margin: .35rem 0 .9rem; }
+    pre, code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+    pre {
+      overflow: auto;
+      margin: .55rem 0 0;
+      padding: .9rem;
+      border: 1px solid #203852;
+      border-radius: 11px;
+      background: #050c16;
+      color: #d8edff;
+      font-size: .86rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    dl { margin: 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; overflow-wrap: anywhere; }
+    .shell { width: min(1520px, 100%); margin: auto; padding: clamp(.8rem, 3vw, 2.8rem); }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgb(16 29 49 / 94%);
+      box-shadow: var(--shadow);
+    }
     .hero {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 2rem;
+      gap: 1.5rem;
       align-items: end;
-      padding: clamp(1.25rem, 4vw, 3rem);
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      background: linear-gradient(145deg, rgb(22 36 59 / 95%), rgb(8 17 31 / 95%));
-      box-shadow: var(--shadow);
+      padding: clamp(1.3rem, 4vw, 3rem);
+      background: linear-gradient(145deg, rgb(23 39 64 / 97%), rgb(7 17 31 / 96%));
     }
-    h1, h2, h3, h4 { line-height: 1.12; margin: 0 0 .7rem; }
-    h1 { font-size: clamp(2rem, 5vw, 4.5rem); max-width: 16ch; letter-spacing: -.045em; }
-    h2 { font-size: clamp(1.5rem, 3vw, 2.3rem); }
-    h3 { font-size: 1.2rem; }
-    p { margin: .4rem 0 1rem; }
-    .eyebrow { color: var(--cyan); text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+    .eyebrow {
+      color: var(--cyan);
+      font-size: .77rem;
+      font-weight: 900;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
     .muted { color: var(--muted); }
-    .mode {
+    .badge, .mode, .state-pill {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      min-width: 9rem;
-      padding: .7rem 1rem;
+      gap: .35rem;
+      width: fit-content;
+      padding: .28rem .65rem;
       border: 1px solid currentColor;
       border-radius: 999px;
       color: var(--green);
+      font-size: .74rem;
       font-weight: 900;
-      letter-spacing: .08em;
+      letter-spacing: .055em;
+      text-transform: uppercase;
     }
-    .mode.estimated { color: var(--amber); }
-    .query-card, .stage-panel, .lab, .tree-node, .event-panel {
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: rgb(16 28 47 / 92%);
-    }
+    .mode { min-width: 8.5rem; justify-content: center; padding: .65rem 1rem; }
+    .estimated, .no-op, .scheduled-no-op { color: var(--amber); }
+    .changed, .transformed { color: var(--green); }
+    .unchanged { color: var(--blue); }
+    .warning { color: var(--amber); }
     .query-card { margin-top: 1rem; padding: 1rem 1.2rem; }
-    .query-card dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .35rem 1rem; }
-    dt { color: var(--muted); }
-    dd { margin: 0; overflow-wrap: anywhere; }
-    pre {
-      overflow: auto;
-      margin: .7rem 0 0;
-      padding: 1rem;
-      border-radius: 12px;
-      background: #050b14;
-      color: #d7edff;
-      font: 14px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
-      white-space: pre-wrap;
+    .query-card dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .3rem 1rem; }
+    .callout {
+      border-left: 4px solid var(--amber);
+      margin: 1rem 0;
+      padding: .75rem 1rem;
+      background: rgb(255 209 119 / 8%);
     }
-    .stage-nav, .action-nav, .timeline-nav {
+    .network-beacon {
+      position: sticky;
+      z-index: 5;
+      top: .5rem;
+      display: grid;
+      grid-template-columns: auto repeat(3, minmax(0, 1fr));
+      gap: .7rem;
+      align-items: center;
+      margin: 1rem 0;
+      padding: .7rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgb(7 17 31 / 94%);
+      backdrop-filter: blur(14px);
+    }
+    .beacon-dot { width: .65rem; height: .65rem; border-radius: 50%; background: var(--green); box-shadow: 0 0 18px currentColor; }
+    .beacon-field strong { display: block; color: var(--cyan); font-size: .7rem; text-transform: uppercase; }
+    .beacon-field span { display: block; overflow: hidden; color: var(--muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+    .rail {
       display: flex;
       gap: .55rem;
-      margin: 1.25rem 0;
-      padding: .2rem .1rem .7rem;
       overflow-x: auto;
+      padding: .25rem .1rem .75rem;
       scrollbar-color: var(--line) transparent;
     }
-    .stage-button, .action-button, .timeline-button {
+    .rail-button {
       flex: 0 0 auto;
-      min-width: 8.5rem;
-      padding: .75rem;
+      min-width: 9.2rem;
+      padding: .72rem;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--panel);
       color: var(--ink);
       text-align: left;
-      cursor: pointer;
     }
-    .stage-button[aria-selected="true"], .action-button[aria-selected="true"],
-    .timeline-button[aria-selected="true"] {
+    .rail-button:hover { border-color: var(--cyan); }
+    .rail-button[aria-selected="true"] {
       border-color: var(--cyan);
-      background: linear-gradient(135deg, rgb(98 216 243 / 18%), rgb(175 141 255 / 12%));
-      box-shadow: inset 0 0 0 1px rgb(98 216 243 / 40%);
+      background: linear-gradient(135deg, rgb(101 219 245 / 18%), rgb(183 155 255 / 12%));
+      box-shadow: inset 0 0 0 1px rgb(101 219 245 / 34%);
     }
-    .stage-button small, .action-button small, .timeline-button small {
-      display: block;
-      color: var(--muted);
+    .rail-button small, .rail-button span { display: block; color: var(--muted); }
+    .rail-button .rail-badges { display: flex; gap: .35rem; margin-top: .45rem; }
+    .stage-panel { padding: clamp(1rem, 3vw, 2rem); }
+    .section-head { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+    .toggle {
+      min-width: 8rem;
+      padding: .45rem .75rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel-3);
     }
-    .stage-panel { padding: clamp(1rem, 3vw, 2rem); min-height: 18rem; }
-    .stage-head { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
-    .badge {
-      display: inline-flex;
-      padding: .25rem .6rem;
-      border-radius: 999px;
-      background: rgb(104 221 168 / 13%);
-      color: var(--green);
-      font-size: .78rem;
-      font-weight: 900;
-      letter-spacing: .06em;
-    }
-    .badge.no-op, .badge.scheduled-no-op { color: var(--amber); background: rgb(255 201 107 / 12%); }
-    .badge.estimated { color: var(--amber); background: rgb(255 201 107 / 12%); }
-    .no-op {
-      border-left: 4px solid var(--amber);
-      margin: 1rem 0;
-      padding: .8rem 1rem;
-      background: rgb(255 201 107 / 8%);
-    }
-    .lab { margin-top: 1rem; padding: 1rem; }
-    .grid-2, .stack-heap {
+    .overview-grid, .detail-grid, .fact-grid, .lane-grid, .stack-heap, .compare-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1rem;
-    }
-    .fact-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: .8rem;
-      margin-top: 1rem;
     }
-    .fact, .stack-frame, .heap-zone, .component {
+    .overview-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-top: .8rem; }
+    .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fact-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .lane-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .stack-heap, .compare-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fact, .panel, .lane, .stack-frame, .heap-zone, .component, .scenario, .tree-node {
+      min-width: 0;
       padding: .85rem;
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--panel-2);
     }
-    .fact strong, .component strong { display: block; color: var(--cyan); }
-    .links { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-top: 1rem; }
-    .tree { overflow-x: auto; padding-bottom: .5rem; }
-    .tree ul { list-style: none; margin: .75rem 0 0 1.1rem; padding-left: 1.1rem; border-left: 1px solid var(--line); }
-    .tree li { margin: .75rem 0; }
-    .tree-node { min-width: 17rem; padding: .85rem 1rem; }
-    .tree-node code { color: var(--violet); }
-    .execution-layout { display: grid; gap: 1rem; }
-    .event-panel { padding: 1rem; }
-    .stack-heap { margin-top: 1rem; }
-    .stack-list, .heap-list, .component-list { display: grid; gap: .7rem; }
-    .language { color: var(--violet); font-weight: 800; }
-    .state { color: var(--amber); font-weight: 800; text-transform: uppercase; font-size: .76rem; }
+    .fact strong, .panel > strong, .component > strong { display: block; color: var(--cyan); }
+    .substep-shell { margin-top: 1rem; }
+    .substep-controls, .lab-controls, .traversal-controls {
+      display: grid;
+      grid-template-columns: auto minmax(8rem, 1fr) auto;
+      gap: .7rem;
+      align-items: center;
+      margin: .65rem 0 1rem;
+    }
+    .lab-controls { grid-template-columns: repeat(4, auto) minmax(8rem, 1fr); }
+    .traversal-controls { grid-template-columns: repeat(2, auto) minmax(8rem, 1fr) auto; }
+    .control-button {
+      padding: .55rem .8rem;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel-3);
+    }
+    .control-button.primary { border-color: var(--cyan); color: var(--cyan); }
+    input[type="range"] { width: 100%; accent-color: var(--cyan); }
+    select {
+      width: 100%;
+      padding: .55rem .7rem;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel-3);
+    }
+    .substep-detail, .traversal-lab, .runner-lab, .additional-context { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 15px; background: rgb(11 23 40 / 78%); }
+    .method-path { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0; }
+    .method-path code { padding: .25rem .45rem; border-radius: 7px; background: var(--panel-2); color: var(--violet); }
+    .method-path code + code::before { content: "→"; margin-right: .45rem; color: var(--muted); }
+    .links { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin-top: .7rem; }
+    .tree { overflow-x: auto; }
+    .tree ul { list-style: none; margin: .65rem 0 0 1.1rem; padding-left: 1rem; border-left: 1px solid var(--line); }
+    .tree li { margin: .65rem 0; }
+    .tree-node { min-width: 16rem; }
+    .tree-node.active { border-color: var(--amber); box-shadow: inset 0 0 0 1px rgb(255 209 119 / 35%); }
+    details.artifact-panel, details.deep-dive, details.input-contract {
+      margin-top: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: rgb(11 23 40 / 80%);
+    }
+    details > summary { cursor: pointer; padding: .85rem 1rem; color: var(--cyan); font-weight: 800; }
+    details > .details-body { padding: 0 1rem 1rem; }
+    .runner-title { display: flex; justify-content: space-between; gap: .8rem; align-items: start; }
+    .progress { height: .55rem; overflow: hidden; border-radius: 999px; background: var(--panel-3); }
+    .progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--cyan), var(--violet)); transition: width .2s ease; }
+    .action-rail { margin: .8rem 0; }
+    .action-rail .rail-button { min-width: 11rem; }
+    .runner-state { margin-top: .8rem; }
+    .diff-before { border-left: 3px solid var(--red); }
+    .diff-after { border-left: 3px solid var(--green); }
+    .experiment { margin-top: .8rem; padding: .85rem; border: 1px dashed var(--violet); border-radius: 12px; }
+    .experiment-result { min-height: 3rem; margin-top: .6rem; padding: .65rem; border-radius: 9px; background: var(--panel-3); }
+    .mapping-table, .data-table { width: 100%; border-collapse: collapse; }
+    .mapping-table th, .mapping-table td, .data-table th, .data-table td { padding: .55rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .mapping-table th, .data-table th { color: var(--cyan); }
+    .lane { position: relative; min-height: 8rem; }
+    .lane::before { content: ""; position: absolute; inset: .4rem auto .4rem -.45rem; border-left: 2px solid var(--violet); }
+    .node-range-button { margin: .25rem; }
+    .language { color: var(--violet); font-weight: 900; }
+    .state { color: var(--amber); font-size: .74rem; font-weight: 900; text-transform: uppercase; }
+    .stack-list, .heap-list, .component-list, .scenario-list { display: grid; gap: .65rem; }
     #runtime-components { margin-top: 1rem; }
     .component dl { display: grid; grid-template-columns: 9rem 1fr; gap: .25rem .7rem; }
+    .direction-flow { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; padding: .7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-3); }
+    .direction-flow span + span::before { content: "→"; margin-right: .6rem; color: var(--amber); }
+    .source-count { color: var(--muted); font-size: .8rem; }
     footer { padding: 2rem 0 0; color: var(--muted); text-align: center; }
     .sr-only {
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
       overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
     }
-    @media (max-width: 760px) {
-      .hero, .grid-2, .stack-heap, .fact-grid { grid-template-columns: 1fr; }
-      .hero { align-items: start; }
-      .stage-head { display: block; }
+    [hidden] { display: none !important; }
+    @media (max-width: 1050px) {
+      .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .lane-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .network-beacon { grid-template-columns: auto 1fr; }
+      .beacon-field { grid-column: 2; }
+    }
+    @media (max-width: 720px) {
+      .hero, .detail-grid, .fact-grid, .compare-grid, .stack-heap, .overview-grid, .lane-grid { grid-template-columns: 1fr; }
+      .section-head, .runner-title { display: block; }
       .query-card dl, .component dl { grid-template-columns: 1fr; }
-      dd { margin-bottom: .5rem; }
+      .substep-controls { grid-template-columns: auto 1fr auto; }
+      .lab-controls, .traversal-controls { grid-template-columns: repeat(2, 1fr); }
+      .lab-controls input, .traversal-controls input { grid-column: 1 / -1; }
     }
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
     }
     @media print {
-      :root { color-scheme: light; --bg: white; --panel: white; --panel-2: #f5f7fa; --ink: #111827; --muted: #4b5563; --line: #cbd5e1; }
+      :root { color-scheme: light; --bg: white; --panel: white; --panel-2: #f7f9fc; --panel-3: #eef2f7; --ink: #111827; --muted: #4b5563; --line: #cbd5e1; }
       body { background: white; }
       .shell { width: 100%; padding: 0; }
-      .stage-nav, .action-nav, .timeline-nav { display: none; }
-      .hero, .stage-panel { box-shadow: none; }
+      .network-beacon, .rail, .substep-controls, .lab-controls, .traversal-controls { display: none; }
+      .card { box-shadow: none; }
+      details { break-inside: avoid; }
+      details > .details-body { display: block !important; }
       a { color: #075985; }
     }
   </style>
 </head>
 <body>
   <main class="shell">
-    <header class="hero">
+    <header class="hero card">
       <div>
         <div class="eyebrow">Kusto query lifecycle</div>
         <h1>__DOCUMENT_TITLE__</h1>
-        <p class="muted">A query-specific, source-grounded journey from syntax to execution.</p>
+        <p class="muted">A query-specific, source-grounded journey from syntax through execution.</p>
       </div>
       <div class="mode" id="evidence-mode">__EVIDENCE_MODE__</div>
     </header>
 
-    <section class="query-card" aria-labelledby="query-heading">
+    <section class="query-card card" aria-labelledby="query-heading">
       <h2 id="query-heading">Query context</h2>
       <dl>
         <dt>Cluster</dt><dd id="cluster"></dd>
@@ -216,52 +306,887 @@
         <dt>Source commit</dt><dd><code id="commit"></code></dd>
       </dl>
       <pre id="query-text" aria-label="Supplied query text"></pre>
-      <p class="no-op" id="estimate-reason" hidden></p>
+      <p class="callout" id="estimate-reason" hidden></p>
     </section>
 
-    <nav class="stage-nav" id="stage-nav" aria-label="Ten query lifecycle phases"></nav>
-    <section class="stage-panel" id="stage-panel" aria-live="polite">
-      <div class="stage-head">
+    <aside class="network-beacon" id="network-beacon" data-feature-id="network-beacon" aria-live="polite" aria-label="Outbound HTTP status">
+      <span class="beacon-dot" aria-hidden="true"></span>
+      <div class="beacon-field"><strong>State</strong><span id="network-state"></span></div>
+      <div class="beacon-field"><strong>Route</strong><span id="network-route"></span></div>
+      <div class="beacon-field"><strong>Purpose</strong><span id="network-purpose"></span></div>
+    </aside>
+
+    <nav class="rail" id="stage-nav" data-feature-id="stage-navigation" aria-label="Ten query lifecycle phases"></nav>
+    <section class="stage-panel card" id="stage-panel" aria-live="polite">
+      <header class="section-head">
         <div><div class="eyebrow" id="stage-number"></div><h2 id="stage-title"></h2></div>
         <span class="badge" id="stage-badge"></span>
-      </div>
-      <p id="stage-summary"></p>
-      <div class="no-op" id="no-op" hidden></div>
-      <div class="links" id="stage-links"></div>
-      <nav class="action-nav" id="action-nav" aria-label="Actions in selected phase"></nav>
-      <div id="stage-content"></div>
+      </header>
+
+      <section id="stage-overview" data-feature-id="stage-overview">
+        <div class="section-head">
+          <div><h3>Detailed stage overview</h3><p id="stage-summary"></p></div>
+          <button class="toggle" id="stage-overview-toggle" data-feature-id="stage-overview-toggle" type="button" aria-expanded="true" aria-controls="stage-overview-body">Collapse overview</button>
+        </div>
+        <div id="stage-overview-body">
+          <div class="overview-grid" id="stage-overview-grid" data-feature-id="stage-overview-grid"></div>
+          <div class="callout" id="no-op" hidden></div>
+          <div class="links" id="stage-links"></div>
+        </div>
+      </section>
+
+      <section class="substep-shell" aria-labelledby="substep-heading">
+        <h3 id="substep-heading">Query-specific substeps</h3>
+        <nav class="rail" id="substep-rail" data-feature-id="substep-rail" aria-label="Substeps in selected phase"></nav>
+        <div class="substep-controls">
+          <button class="control-button" id="substep-prev" data-feature-id="substep-prev" type="button">Previous substep</button>
+          <label><span class="sr-only">Selected substep</span><input id="substep-slider" data-feature-id="substep-slider" type="range" min="0" value="0"></label>
+          <button class="control-button" id="substep-next" data-feature-id="substep-next" type="button">Next substep</button>
+        </div>
+
+        <article class="substep-detail" id="substep-detail" data-feature-id="substep-detail">
+          <header class="section-head">
+            <div><div class="eyebrow" id="substep-number"></div><h3 id="substep-title"></h3></div>
+            <div><span class="badge" id="substep-behavior"></span> <span class="badge" id="substep-change"></span></div>
+          </header>
+          <p id="substep-summary"></p>
+          <div class="detail-grid" id="substep-facts"></div>
+          <h4>Method path</h4>
+          <div class="method-path" id="method-path"></div>
+          <div class="links" id="substep-links"></div>
+        </article>
+
+        <section class="traversal-lab" id="traversal-lab" data-feature-id="traversal-lab" aria-labelledby="traversal-heading">
+          <div class="section-head">
+            <div><div class="eyebrow">Linked traversal</div><h3 id="traversal-heading">Walk the evidence tree</h3></div>
+            <span class="state-pill" id="traversal-status"></span>
+          </div>
+          <div class="tree" id="traversal-tree"></div>
+          <div class="traversal-controls">
+            <button class="control-button" id="traversal-prev" data-feature-id="traversal-prev" type="button">Previous node</button>
+            <button class="control-button" id="traversal-play" data-feature-id="traversal-play" type="button">Play traversal</button>
+            <label><span class="sr-only">Traversal position</span><input id="traversal-slider" data-feature-id="traversal-slider" type="range" min="0" value="0"></label>
+            <button class="control-button" id="traversal-next" data-feature-id="traversal-next" type="button">Next node</button>
+          </div>
+          <div class="fact-grid" id="traversal-facts"></div>
+        </section>
+
+        <details class="artifact-panel" id="artifact-panel" data-feature-id="artifact-panel">
+          <summary id="artifact-title">Before/after artifact</summary>
+          <div class="details-body">
+            <div class="compare-grid">
+              <section class="panel diff-before"><h4>Before</h4><pre id="artifact-before"></pre></section>
+              <section class="panel diff-after"><h4>After</h4><pre id="artifact-after"></pre></section>
+            </div>
+            <h4>Linked operators</h4>
+            <div class="rail" id="artifact-operators"></div>
+          </div>
+        </details>
+
+        <section class="runner-lab" id="runner-lab" data-feature-id="runner-lab" aria-labelledby="runner-heading">
+          <header class="runner-title">
+            <div><div class="eyebrow" id="runner-kind"></div><h3 id="runner-heading"></h3></div>
+            <span class="state-pill" id="runner-status"></span>
+          </header>
+          <div class="lab-controls">
+            <button class="control-button" id="runner-reset" data-feature-id="runner-reset" type="button">Reset</button>
+            <button class="control-button" id="runner-prev" data-feature-id="runner-prev" type="button">Previous</button>
+            <button class="control-button" id="runner-next" data-feature-id="runner-next" type="button">Next</button>
+            <button class="control-button primary" id="runner-apply" data-feature-id="runner-apply" type="button">Apply step</button>
+            <label><span class="sr-only">Runner progress</span><input id="runner-slider" data-feature-id="runner-slider" type="range" min="0" value="0"></label>
+          </div>
+          <div class="progress" aria-label="Runner progress"><span id="runner-progress"></span></div>
+          <nav class="rail action-rail" id="runner-action-rail" data-feature-id="runner-action-rail" aria-label="Runner actions"></nav>
+          <div class="runner-state" id="runner-state"></div>
+          <div id="runner-specialized"></div>
+          <div class="links" id="runner-links"></div>
+        </section>
+
+        <section class="additional-context" id="additional-context" data-feature-id="additional-context" hidden>
+          <h3>Additional context</h3>
+          <div id="additional-context-body"></div>
+        </section>
+      </section>
     </section>
-    <footer>Generated locally from validated evidence. The supplied query was not executed.</footer>
+    <footer>Generated locally from validated evidence. The supplied query was never executed.</footer>
   </main>
 
   <script type="application/json" id="walkthrough-data">__MODEL_JSON__</script>
   <script>
     "use strict";
+    const FEATURE_IDS = Object.freeze([
+      "network-beacon", "stage-navigation", "stage-overview", "stage-overview-toggle",
+      "stage-overview-grid", "substep-rail", "substep-prev", "substep-slider",
+      "substep-next", "substep-detail", "traversal-lab", "traversal-prev",
+      "traversal-play", "traversal-slider", "traversal-next", "artifact-panel",
+      "runner-lab", "runner-reset", "runner-prev", "runner-next", "runner-apply",
+      "runner-slider", "runner-action-rail", "additional-context", "compiler-lab",
+      "pass-lab", "physical-lab", "physical-deep-dive", "boundary-lab",
+      "execute-lab", "conceptual-call-stack", "heap-lifetime-zones", "runtime-components"
+    ]);
     const model = JSON.parse(document.getElementById("walkthrough-data").textContent);
     const byId = (id) => document.getElementById(id);
     const node = (tag, className, text) => {
       const item = document.createElement(tag);
       if (className) item.className = className;
-      if (text !== undefined) item.textContent = text;
+      if (text !== undefined) item.textContent = String(text);
       return item;
     };
     const clear = (item) => item.replaceChildren();
-    const badgeClass = (kind) => `badge ${kind.toLowerCase().replaceAll("_", "-")}`;
-    const addLinks = (container, links) => {
+    const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+    const badgeClass = (kind) => `badge ${String(kind).toLowerCase().replaceAll("_", "-")}`;
+    const state = { stage: 0, substep: 0, traversal: 0, runner: 0, playing: false, playTimer: null };
+
+    function updateNetwork(nextState, route, purpose) {
+      byId("network-state").textContent = nextState;
+      byId("network-route").textContent = route;
+      byId("network-purpose").textContent = purpose;
+    }
+
+    function sourceAnchor(link) {
+      const anchor = node("a", "", `${link.label} · L${link.start_line}-${link.end_line}`);
+      anchor.href = link.url;
+      anchor.target = "_blank";
+      anchor.rel = "noreferrer";
+      anchor.addEventListener("click", () => {
+        const destination = new URL(link.url);
+        updateNetwork("OPENING", `${destination.host}${destination.pathname}`, `Open ${link.label}`);
+        window.setTimeout(() => updateNetwork("OPENED", destination.host, "Exact commit-pinned source evidence"), 250);
+      });
+      return anchor;
+    }
+
+    function appendLinks(container, links) {
       clear(container);
-      for (const link of links) {
-        const anchor = node("a", "", `${link.label} · L${link.start_line}-${link.end_line}`);
-        anchor.href = link.url;
-        anchor.target = "_blank";
-        anchor.rel = "noreferrer";
-        container.append(anchor);
-      }
-    };
-    const linksBlock = (links) => {
+      for (const link of links || []) container.append(sourceAnchor(link));
+    }
+
+    function linksBlock(links) {
       const block = node("div", "links");
-      addLinks(block, links);
+      for (const link of links || []) block.append(sourceAnchor(link));
       return block;
-    };
+    }
+
+    function fact(label, value) {
+      const item = node("div", "fact");
+      item.append(node("strong", "", label), node("span", "", value));
+      return item;
+    }
+
+    function renderTable(headers, rows, className = "data-table") {
+      const table = node("table", className);
+      const head = node("thead");
+      const headerRow = node("tr");
+      for (const header of headers) headerRow.append(node("th", "", header));
+      head.append(headerRow);
+      const body = node("tbody");
+      for (const row of rows) {
+        const tr = node("tr");
+        for (const value of row) tr.append(node("td", "", value));
+        body.append(tr);
+      }
+      table.append(head, body);
+      return table;
+    }
+
+    function currentStage() { return model.stages[state.stage]; }
+    function currentSubstep() { return currentStage().substeps[state.substep]; }
+    function currentRunner() { return currentSubstep().runner; }
+    function runnerSnapshots() { return currentRunner().snapshots; }
+
+    function setCollapsed(button, body, collapsed, expandedLabel, collapsedLabel) {
+      button.setAttribute("aria-expanded", String(!collapsed));
+      body.hidden = collapsed;
+      button.textContent = collapsed ? expandedLabel : collapsedLabel;
+    }
+
+    function renderOverview(stage) {
+      const fields = [
+        ["Input", stage.overview.input],
+        ["Output", stage.overview.output],
+        ["Owner", stage.overview.owner],
+        ["Not responsible", stage.overview.not_responsible],
+        ["Handoff", stage.overview.handoff]
+      ];
+      const grid = byId("stage-overview-grid");
+      clear(grid);
+      for (const [label, value] of fields) grid.append(fact(label, value));
+      byId("no-op").hidden = !stage.no_op_explanation;
+      byId("no-op").textContent = stage.no_op_explanation ? `Why no transformation occurs: ${stage.no_op_explanation}` : "";
+      appendLinks(byId("stage-links"), stage.source_links);
+    }
+
+    function railButton(kicker, title, selected, click, badges = []) {
+      const button = node("button", "rail-button");
+      button.type = "button";
+      button.setAttribute("aria-selected", String(selected));
+      button.append(node("small", "", kicker), node("strong", "", title));
+      if (badges.length) {
+        const row = node("span", "rail-badges");
+        for (const value of badges) row.append(node("span", badgeClass(value), value));
+        button.append(row);
+      }
+      button.addEventListener("click", click);
+      return button;
+    }
+
+    function renderSubstepRail(stage) {
+      const rail = byId("substep-rail");
+      clear(rail);
+      stage.substeps.forEach((substep, index) => {
+        rail.append(railButton(
+          `Substep ${index + 1} · ${substep.runner.actions.length} runner action${substep.runner.actions.length === 1 ? "" : "s"}`,
+          substep.title,
+          index === state.substep,
+          () => selectSubstep(index),
+          [substep.behavior, substep.change_badge]
+        ));
+      });
+      const slider = byId("substep-slider");
+      slider.max = String(stage.substeps.length - 1);
+      slider.value = String(state.substep);
+      byId("substep-prev").disabled = state.substep === 0;
+      byId("substep-next").disabled = state.substep === stage.substeps.length - 1;
+    }
+
+    function selectSubstep(index) {
+      stopTraversal();
+      state.substep = clamp(index, 0, currentStage().substeps.length - 1);
+      state.traversal = 0;
+      state.runner = 0;
+      renderSubstep();
+    }
+
+    function renderSubstepDetail(substep) {
+      byId("substep-number").textContent = `Substep ${state.substep + 1} of ${currentStage().substeps.length}`;
+      byId("substep-title").textContent = substep.title;
+      byId("substep-behavior").textContent = substep.behavior;
+      byId("substep-behavior").className = badgeClass(substep.behavior);
+      byId("substep-change").textContent = substep.change_badge;
+      byId("substep-change").className = badgeClass(substep.change_badge);
+      byId("substep-summary").textContent = substep.summary;
+      const facts = byId("substep-facts");
+      clear(facts);
+      const values = [
+        ["What happens", substep.what_happens],
+        ["Why", substep.why],
+        ["Debug", substep.debug],
+        ["Next", substep.next]
+      ];
+      for (const [label, value] of values) facts.append(fact(label, value));
+      const methodPath = byId("method-path");
+      clear(methodPath);
+      for (const method of substep.method_path) methodPath.append(node("code", "", method));
+      appendLinks(byId("substep-links"), substep.source_links);
+    }
+
+    function renderTraversal(substep) {
+      const traversal = substep.traversal;
+      state.traversal = clamp(state.traversal, 0, traversal.snapshots.length - 1);
+      const snapshot = traversal.snapshots[state.traversal];
+      const tree = byId("traversal-tree");
+      clear(tree);
+      const list = node("ul");
+      traversal.nodes.forEach((treeNode, index) => {
+        const item = node("li");
+        const card = node("article", `tree-node${treeNode.id === snapshot.current ? " active" : ""}`);
+        card.append(node("code", "", treeNode.id), node("h4", "", treeNode.label), node("span", "state", treeNode.state), linksBlock(treeNode.source_links));
+        item.append(card);
+        list.append(item);
+      });
+      tree.append(list);
+      const slider = byId("traversal-slider");
+      slider.max = String(traversal.snapshots.length - 1);
+      slider.value = String(state.traversal);
+      byId("traversal-prev").disabled = state.traversal === 0;
+      byId("traversal-next").disabled = state.traversal === traversal.snapshots.length - 1;
+      byId("traversal-status").textContent = `${state.traversal + 1} / ${traversal.snapshots.length}`;
+      const facts = byId("traversal-facts");
+      clear(facts);
+      for (const [label, value] of [
+        ["Current", snapshot.current],
+        ["Movement", snapshot.movement],
+        ["Return", snapshot.return_value],
+        ["Next", snapshot.next]
+      ]) facts.append(fact(label, value));
+    }
+
+    function stopTraversal() {
+      if (state.playTimer) window.clearInterval(state.playTimer);
+      state.playTimer = null;
+      state.playing = false;
+      const button = byId("traversal-play");
+      if (button) button.textContent = "Play traversal";
+    }
+
+    function toggleTraversal() {
+      if (state.playing) {
+        stopTraversal();
+        return;
+      }
+      state.playing = true;
+      byId("traversal-play").textContent = "Pause traversal";
+      state.playTimer = window.setInterval(() => {
+        const maximum = currentSubstep().traversal.snapshots.length - 1;
+        if (state.traversal >= maximum) {
+          stopTraversal();
+          return;
+        }
+        state.traversal += 1;
+        renderTraversal(currentSubstep());
+      }, 700);
+    }
+
+    function renderArtifact(substep) {
+      const artifact = substep.artifact;
+      byId("artifact-title").textContent = artifact.title;
+      byId("artifact-panel").open = !artifact.collapsed_by_default;
+      byId("artifact-before").textContent = artifact.before;
+      byId("artifact-after").textContent = artifact.after;
+      const rail = byId("artifact-operators");
+      clear(rail);
+      for (const operator of artifact.operators) {
+        const card = node("article", "tree-node");
+        card.append(node("code", "", operator.id), node("h4", "", operator.label), node("span", "state", operator.state), linksBlock(operator.source_links));
+        rail.append(card);
+      }
+    }
+
+    function renderRunnerAction(runner) {
+      state.runner = clamp(state.runner, 0, runner.snapshots.length - 1);
+      const actionIndex = clamp(state.runner, 0, runner.actions.length - 1);
+      const action = runner.actions[actionIndex];
+      const snapshot = runner.snapshots[state.runner];
+      const content = byId("runner-state");
+      clear(content);
+      const header = node("div", "section-head");
+      header.append(node("h4", "", action.title), node("span", badgeClass(action.evidence_kind), action.evidence_kind));
+      content.append(header, node("p", "", action.what));
+      const facts = node("div", "fact-grid");
+      for (const [label, value] of [
+        ["Why", action.why],
+        ["Result", action.result],
+        ["Stack effect", action.stack_effect],
+        ["Heap/lifetime effect", action.heap_effect],
+        ["Current", snapshot.current],
+        ["Next", snapshot.next]
+      ]) facts.append(fact(label, value));
+      content.append(facts);
+      const compare = node("div", "compare-grid");
+      const before = node("section", "panel diff-before");
+      before.append(node("h4", "", "Before"), node("pre", "", action.before));
+      const after = node("section", "panel diff-after");
+      after.append(node("h4", "", "After"), node("pre", "", action.after));
+      compare.append(before, after);
+      content.append(compare, linksBlock(action.source_links), node("p", "muted", snapshot.visible_state));
+      byId("runner-status").textContent = `${snapshot.label} · ${snapshot.progress}%`;
+      byId("runner-progress").style.width = `${snapshot.progress}%`;
+      const slider = byId("runner-slider");
+      slider.max = String(runner.snapshots.length - 1);
+      slider.value = String(state.runner);
+      byId("runner-prev").disabled = state.runner === 0;
+      byId("runner-next").disabled = state.runner === runner.snapshots.length - 1;
+      byId("runner-apply").disabled = state.runner === runner.snapshots.length - 1;
+      [...byId("runner-action-rail").children].forEach((button, index) => button.setAttribute("aria-selected", String(index === actionIndex)));
+    }
+
+    function renderExperiments(runner, container) {
+      for (const experiment of runner.experiments) {
+        const panel = node("section", "experiment");
+        panel.append(node("h4", "", experiment.title));
+        const select = node("select");
+        select.setAttribute("aria-label", experiment.title);
+        for (const option of experiment.options) {
+          const item = node("option", "", option.label);
+          item.value = option.id;
+          select.append(item);
+        }
+        const result = node("div", "experiment-result");
+        const show = () => {
+          const match = experiment.results.find((entry) => entry.option_id === select.value);
+          result.textContent = match ? match.result : "No result is defined.";
+        };
+        select.addEventListener("change", show);
+        panel.append(select, result, linksBlock(experiment.source_links));
+        container.append(panel);
+        show();
+      }
+    }
+
+    function renderCompiler(runner, container) {
+      const section = node("section", "panel");
+      section.id = "compiler-lab";
+      section.dataset.featureId = "compiler-lab";
+      section.append(node("h4", "", `Compiler mode · ${runner.compiler.mode}`));
+      section.append(renderTable(
+        ["Before action", "Input", "Result"],
+        runner.compiler.before_actions.map((item) => [item.title, item.before, item.result])
+      ));
+      section.append(renderTable(
+        ["After action", "Output", "Result"],
+        runner.compiler.after_actions.map((item) => [item.title, item.after, item.result])
+      ));
+      for (const item of [...runner.compiler.before_actions, ...runner.compiler.after_actions]) {
+        section.append(linksBlock(item.source_links));
+      }
+      const mappings = runner.compiler.mapping || [];
+      if (mappings.length) {
+        section.append(renderTable(
+          ["From", "To", "Why"],
+          mappings.map((item) => [item.from, item.to, item.reason]),
+          "mapping-table"
+        ));
+        for (const item of mappings) section.append(linksBlock(item.source_links));
+      }
+      container.append(section);
+      renderExperiments(runner, container);
+    }
+
+    function renderPass(runner, container) {
+      const section = node("section", "panel");
+      section.id = "pass-lab";
+      section.dataset.featureId = "pass-lab";
+      section.append(
+        node("h4", "", "Applicable pass pipeline"),
+        fact("Pipeline input", runner.pass.cumulative_before),
+        fact("Cumulative output", runner.pass.cumulative_after)
+      );
+      const rows = runner.pass.applicable_passes.map((pass) => [
+        pass.title,
+        pass.traversal,
+        pass.predicate,
+        pass.applicability,
+        pass.optimization,
+        pass.outcome
+      ]);
+      section.append(renderTable(["Pass", "Traversal", "Predicate", "Why applicable", "Optimizes", "Outcome"], rows));
+      for (const pass of runner.pass.applicable_passes) section.append(linksBlock(pass.source_links));
+      for (const table of runner.pass.additional_context_tables) {
+        section.append(node("h4", "", table.title), renderTable(table.columns, table.rows), linksBlock(table.source_links));
+      }
+      container.append(section);
+      renderExperiments(runner, container);
+    }
+
+    function renderOperatorTree(root, activeId = "") {
+      const tree = node("div", "tree");
+      const list = node("ul");
+      function visit(operator) {
+        const item = node("li");
+        const card = node("article", `tree-node${operator.operator_id === activeId ? " active" : ""}`);
+        card.append(
+          node("code", "", `${operator.operator_id} · node ${operator.node_id}`),
+          node("h4", "", operator.name),
+          node("p", "", operator.details),
+          fact("Input schema", operator.input_schema.map((field) => `${field.name}:${field.type}${field.nullable ? "?" : ""}`).join(", ")),
+          fact("Output schema", operator.output_schema.map((field) => `${field.name}:${field.type}${field.nullable ? "?" : ""}`).join(", ")),
+          fact("Key indexes", operator.key_indexes.join(", ") || "None"),
+          fact("Execution eligibility", operator.execution_eligibility),
+          fact("Rust eligibility", operator.rust_eligibility),
+          fact("Target scope", operator.target_scope),
+          fact(
+            "Remote query metadata",
+            operator.remote_metadata.applicable
+              ? `${operator.remote_metadata.cluster} / ${operator.remote_metadata.database} / ${operator.remote_metadata.endpoint}`
+              : operator.remote_metadata.reason
+          ),
+          linksBlock(operator.source_links)
+        );
+        item.append(card);
+        if (operator.children.length) {
+          const children = node("ul");
+          for (const child of operator.children) children.append(visit(child));
+          item.append(children);
+        }
+        return item;
+      }
+      list.append(visit(root));
+      tree.append(list);
+      return tree;
+    }
+
+    function renderPhysical(runner, container) {
+      const section = node("section", "panel");
+      section.id = "physical-lab";
+      section.dataset.featureId = "physical-lab";
+      const contract = node("details", "input-contract");
+      contract.open = false;
+      const contractBody = node("div", "details-body");
+      contractBody.append(renderTable(
+        ["Field", "Type", "Nullable", "Description"],
+        runner.physical.input_contract.fields.map((field) => [
+          field.name,
+          field.type,
+          field.nullable ? "yes" : "no",
+          field.description
+        ])
+      ), linksBlock(runner.physical.input_contract.source_links));
+      contract.append(node("summary", "", runner.physical.input_contract.title), contractBody);
+      section.append(node("h4", "", "Physical action lab"), contract);
+
+      const deepDive = node("details", "deep-dive");
+      deepDive.id = "physical-deep-dive";
+      deepDive.dataset.featureId = "physical-deep-dive";
+      const planLabel = runner.physical.full_plan.complete
+        ? "Full physical plan"
+        : "ESTIMATED physical plan coverage · completeness not claimed";
+      deepDive.append(node("summary", "", `${planLabel} · ${runner.physical.full_plan.operator_count} operators`));
+      const body = node("div", "details-body");
+      for (const root of runner.physical.full_plan.roots) body.append(renderOperatorTree(root));
+      body.append(renderTable(
+        ["Logical", "Physical operators", "Reason"],
+        runner.physical.logical_to_physical.map((item) => [
+          item.logical_id,
+          item.physical_operator_ids.join(", "),
+          item.reason
+        ])
+      ));
+      for (const mapping of runner.physical.logical_to_physical) {
+        body.append(linksBlock(mapping.source_links));
+      }
+      const rawSections = runner.physical.raw_plan_sections || [];
+      if (rawSections.length) {
+        for (const raw of rawSections) {
+          const panel = node("section", "panel");
+          panel.append(node("h4", "", raw.title), node("pre", "", raw.content), linksBlock(raw.source_links));
+          body.append(panel);
+        }
+      }
+      deepDive.append(body);
+      section.append(deepDive);
+      container.append(section);
+      renderExperiments(runner, container);
+    }
+
+    function renderBoundary(runner, container) {
+      const section = node("section", "panel");
+      section.id = "boundary-lab";
+      section.dataset.featureId = "boundary-lab";
+      section.append(node("h4", "", "Managed → JSON → UTF-8 → native lanes"));
+      const lanes = node("div", "lane-grid");
+      for (const lane of runner.boundary.lanes) {
+        const card = node("article", "lane");
+        card.append(
+          node("span", "language", lane.title),
+          node("span", "state", ` ${lane.id}`),
+          node("pre", "", `Input\n${lane.input}\n\nOutput\n${lane.output}`),
+          linksBlock(lane.source_links)
+        );
+        lanes.append(card);
+      }
+      section.append(lanes, node("h4", "", "Object, JSON, and byte representations"));
+      const representations = node("div", "lane-grid");
+      for (const name of ["object", "json", "bytes"]) {
+        const representation = runner.boundary.representations[name];
+        const card = node("article", "lane");
+        card.append(node("h4", "", representation.label), node("pre", "", representation.content), linksBlock(representation.source_links));
+        representations.append(card);
+      }
+      section.append(representations, node("h4", "", "Selectable node byte ranges"));
+      const ranges = node("div");
+      const selected = node("div", "experiment-result", "Select a node or view.");
+      for (const range of runner.boundary.node_byte_ranges) {
+        const button = node("button", "control-button node-range-button", range.node_id);
+        button.type = "button";
+        button.addEventListener("click", () => {
+          selected.textContent = `${range.node_id}: bytes ${range.start}-${range.end} · ${range.description}`;
+          updateNetwork("LOCAL", "In-memory boundary view", `Inspect ${range.node_id}`);
+        });
+        ranges.append(button, linksBlock(range.source_links));
+      }
+      section.append(ranges, selected, node("h4", "", "Selectable views"));
+      for (const view of runner.boundary.selectable_views) {
+        const button = node("button", "control-button node-range-button", view.title);
+        button.type = "button";
+        button.addEventListener("click", () => { selected.textContent = view.content; });
+        section.append(button, linksBlock(view.source_links));
+      }
+      section.append(node("h4", "", "Context comparisons"));
+      for (const comparison of runner.boundary.context_toggle_comparisons) {
+        const button = node("button", "control-button", comparison.title);
+        button.type = "button";
+        button.addEventListener("click", () => {
+          selected.textContent = `Without context: ${comparison.without_context}\nWith context: ${comparison.with_context}`;
+        });
+        section.append(button, linksBlock(comparison.source_links));
+      }
+      section.append(node("h4", "", "Failure injection"));
+      for (const failure of runner.boundary.failure_injections) {
+        const button = node("button", "control-button", failure.title);
+        button.type = "button";
+        button.addEventListener("click", () => {
+          selected.textContent = `Injection: ${failure.injection}\nExpected result: ${failure.expected_failure}`;
+        });
+        section.append(button, linksBlock(failure.source_links));
+      }
+      section.append(node("h4", "", "Debugger map"));
+      section.append(renderTable(
+        ["Boundary", "Managed breakpoint", "Native breakpoint"],
+        runner.boundary.debugger_map.map((item) => [
+          item.boundary_id,
+          item.managed_location,
+          item.native_location
+        ])
+      ));
+      for (const item of runner.boundary.debugger_map) section.append(linksBlock(item.source_links));
+      container.append(section);
+      renderExperiments(runner, container);
+    }
+
+    function renderExecute(runner, container) {
+      const section = node("section", "panel");
+      section.id = "execute-lab";
+      section.dataset.featureId = "execute-lab";
+      section.append(node("h4", "", "User-driven execution event"));
+      const component = runner.execute.components[0];
+      const direction = node("div", "direction-flow");
+      direction.append(
+        node("span", "", `Pull: ${component.pull_direction}`),
+        node("span", "", `Data: ${component.data_direction}`),
+        node("span", "", `Owner: ${component.ownership}`),
+        node("span", "", `Breakpoint: ${component.breakpoint}`)
+      );
+      section.append(direction);
+      section.append(renderTable(
+        ["Event", "What", "Why", "Stack effect", "Heap/lifetime effect"],
+        runner.execute.action_timeline.map((event) => [
+          event.title,
+          event.what,
+          event.why,
+          event.stack_effect,
+          event.heap_effect
+        ])
+      ));
+      for (const event of runner.execute.action_timeline) section.append(linksBlock(event.source_links));
+      section.append(node("h4", "", "Applicable language lanes"));
+      section.append(renderTable(
+        ["Language", "Role", "Why applicable"],
+        runner.execute.language_lanes.map((lane) => [
+          lane.language,
+          lane.role,
+          lane.applicability
+        ])
+      ));
+      for (const lane of runner.execute.language_lanes) section.append(linksBlock(lane.source_links));
+
+      const stackHeap = node("div", "stack-heap");
+      const stack = node("section", "panel");
+      stack.id = "conceptual-call-stack";
+      stack.dataset.featureId = "conceptual-call-stack";
+      stack.append(node("h4", "", "Conceptual mixed-language stack · top first"));
+      const stackList = node("div", "stack-list");
+      for (const frame of runner.execute.call_stack) {
+        const card = node("article", "stack-frame");
+        card.append(
+          node("span", "language", `${frame.position} · ${frame.language}`),
+          node("p", "", frame.frame),
+          node("p", "", frame.what),
+          node("p", "muted", frame.why),
+          linksBlock(frame.source_links)
+        );
+        stackList.append(card);
+      }
+      stack.append(stackList);
+
+      const heap = node("section", "panel");
+      heap.id = "heap-lifetime-zones";
+      heap.dataset.featureId = "heap-lifetime-zones";
+      heap.append(node("h4", "", "Heap and query-lifetime zones"));
+      const heapList = node("div", "heap-list");
+      for (const zone of runner.execute.heap_zones) {
+        const card = node("article", "heap-zone");
+        card.append(
+          node("span", "language", zone.language),
+          node("span", "state", ` ${zone.state}`),
+          node("h4", "", zone.id),
+          node("p", "", zone.what),
+          node("p", "muted", `${zone.why} Owner: ${zone.owner}`),
+          linksBlock(zone.source_links)
+        );
+        heapList.append(card);
+      }
+      heap.append(heapList);
+      stackHeap.append(stack, heap);
+      section.append(stackHeap);
+
+      const components = node("section", "panel");
+      components.id = "runtime-components";
+      components.dataset.featureId = "runtime-components";
+      components.append(node("h4", "", "Runtime components below stack and heap"));
+      const componentList = node("div", "component-list");
+      for (const component of runner.execute.components) {
+        const card = node("article", "component");
+        card.append(node("span", "state", component.state), node("h4", "", component.name), node("p", "", component.role));
+        const facts = node("dl");
+        for (const [label, value] of [
+          ["Evidence ref", component.evidence_ref],
+          ["Pull direction", component.pull_direction],
+          ["Data direction", component.data_direction],
+          ["Ownership now", component.ownership],
+          ["Next breakpoint", component.breakpoint]
+        ]) facts.append(node("dt", "", label), node("dd", "", value));
+        card.append(facts, linksBlock(component.source_links));
+        componentList.append(card);
+      }
+      components.append(componentList);
+      section.append(components);
+
+      const scenarios = node("section", "panel");
+      scenarios.append(node("h4", "", "Query-specific failure, cancellation, memory, and lifetime scenarios"));
+      const list = node("div", "scenario-list");
+      for (const scenario of runner.execute.scenarios) {
+        const card = node("article", "scenario");
+        card.append(
+          node("span", "badge", scenario.type),
+          node("h4", "", scenario.type),
+          node("p", "", scenario.trigger),
+          node("p", "", scenario.behavior),
+          node("p", "muted", `Ownership effect: ${scenario.ownership_effect}`),
+          linksBlock(scenario.source_links)
+        );
+        list.append(card);
+      }
+      scenarios.append(list);
+      section.append(scenarios);
+      container.append(section);
+      renderExperiments(runner, container);
+    }
+
+    function renderNoOp(runner, container) {
+      if (!runner.no_op.enabled) return;
+      const panel = node("section", "callout");
+      panel.append(node("h4", "", "No-op evidence gates"));
+      for (const gate of runner.no_op.gates) panel.append(fact("Gate", gate));
+      for (const reason of runner.no_op.reasons) panel.append(fact("Reason", reason));
+      container.append(panel);
+    }
+
+    function renderSpecialized(runner) {
+      const container = byId("runner-specialized");
+      clear(container);
+      renderNoOp(runner, container);
+      const handlers = {
+        compiler: renderCompiler,
+        pass: renderPass,
+        physical: renderPhysical,
+        boundary: renderBoundary,
+        execute: renderExecute
+      };
+      handlers[runner.type](runner, container);
+    }
+
+    function renderRunner(substep) {
+      const runner = substep.runner;
+      state.runner = clamp(state.runner, 0, runner.snapshots.length - 1);
+      byId("runner-kind").textContent = `${runner.type} runner`;
+      byId("runner-heading").textContent = runner.title;
+      byId("runner-reset").textContent = runner.type === "pass" ? "Reset pipeline" : "Reset";
+      byId("runner-apply").textContent =
+        runner.type === "boundary" ? "Play" : runner.type === "execute" ? "Execute" : "Apply";
+      appendLinks(byId("runner-links"), runner.source_links);
+      const rail = byId("runner-action-rail");
+      clear(rail);
+      runner.actions.forEach((action, index) => {
+        rail.append(railButton(
+          `Action ${index + 1}`,
+          action.title,
+          index === clamp(state.runner, 0, runner.actions.length - 1),
+          () => { state.runner = clamp(index, 0, runner.snapshots.length - 1); renderRunnerAction(runner); },
+          [action.evidence_kind]
+        ));
+      });
+      renderRunnerAction(runner);
+      renderSpecialized(runner);
+    }
+
+    function renderAdditionalContext(stage) {
+      const section = byId("additional-context");
+      const body = byId("additional-context-body");
+      clear(body);
+      const contexts = stage.additional_context || null;
+      section.hidden = !contexts;
+      if (!contexts) return;
+      body.append(node("p", "", contexts.summary));
+      for (const context of contexts.tables) {
+        const panel = node("section", "panel");
+        panel.append(node("h4", "", context.title));
+        if (context.rows.length) {
+          panel.append(renderTable(context.columns, context.rows));
+        }
+        panel.append(linksBlock(context.source_links));
+        body.append(panel);
+      }
+    }
+
+    function renderSubstep() {
+      const stage = currentStage();
+      const substep = currentSubstep();
+      renderSubstepRail(stage);
+      renderSubstepDetail(substep);
+      renderTraversal(substep);
+      renderArtifact(substep);
+      renderRunner(substep);
+      renderAdditionalContext(stage);
+    }
+
+    function selectStage(index) {
+      stopTraversal();
+      state.stage = clamp(index, 0, model.stages.length - 1);
+      state.substep = 0;
+      state.traversal = 0;
+      state.runner = 0;
+      renderStage();
+    }
+
+    function renderStage() {
+      const stage = currentStage();
+      byId("stage-number").textContent = `Phase ${stage.order} of ${model.stages.length}`;
+      byId("stage-title").textContent = stage.title;
+      byId("stage-summary").textContent = `${stage.overview.input} → ${stage.overview.output}`;
+      byId("stage-badge").textContent = stage.evidence_kind;
+      byId("stage-badge").className = badgeClass(stage.evidence_kind);
+      [...byId("stage-nav").children].forEach((button, index) => button.setAttribute("aria-selected", String(index === state.stage)));
+      renderOverview(stage);
+      renderSubstep();
+    }
+
+    function changeRunner(delta) {
+      state.runner = clamp(state.runner + delta, 0, runnerSnapshots().length - 1);
+      renderRunnerAction(currentRunner());
+    }
+
+    function bindControls() {
+      byId("stage-overview-toggle").addEventListener("click", () => {
+        const body = byId("stage-overview-body");
+        setCollapsed(byId("stage-overview-toggle"), body, !body.hidden, "Expand overview", "Collapse overview");
+      });
+      byId("substep-prev").addEventListener("click", () => selectSubstep(state.substep - 1));
+      byId("substep-next").addEventListener("click", () => selectSubstep(state.substep + 1));
+      byId("substep-slider").addEventListener("input", (event) => selectSubstep(Number(event.target.value)));
+      byId("traversal-prev").addEventListener("click", () => { state.traversal -= 1; renderTraversal(currentSubstep()); });
+      byId("traversal-next").addEventListener("click", () => { state.traversal += 1; renderTraversal(currentSubstep()); });
+      byId("traversal-slider").addEventListener("input", (event) => { state.traversal = Number(event.target.value); renderTraversal(currentSubstep()); });
+      byId("traversal-play").addEventListener("click", toggleTraversal);
+      byId("runner-reset").addEventListener("click", () => { state.runner = 0; renderRunnerAction(currentRunner()); });
+      byId("runner-prev").addEventListener("click", () => changeRunner(-1));
+      byId("runner-next").addEventListener("click", () => changeRunner(1));
+      byId("runner-apply").addEventListener("click", () => changeRunner(1));
+      byId("runner-slider").addEventListener("input", (event) => { state.runner = Number(event.target.value); renderRunnerAction(currentRunner()); });
+      byId("stage-nav").addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          selectStage(state.stage + (event.key === "ArrowRight" ? 1 : -1));
+          byId("stage-nav").children[state.stage].focus();
+        }
+      });
+      byId("substep-rail").addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+          event.preventDefault();
+          selectSubstep(state.substep + (event.key === "ArrowRight" ? 1 : -1));
+          byId("substep-rail").children[state.substep].focus();
+        }
+      });
+    }
 
     byId("cluster").textContent = model.query.cluster_uri;
     byId("database").textContent = model.query.database;
@@ -272,211 +1197,61 @@
       byId("estimate-reason").hidden = false;
       byId("estimate-reason").textContent = `ESTIMATED: ${model.estimate_reason}`;
     }
-
-    let stageIndex = 0;
-    let actionIndex = 0;
-    let eventIndex = 0;
-
-    function renderAction(action, optimizer) {
-      const lab = node("section", "lab");
-      const header = node("div", "stage-head");
-      const heading = node("h3", "", action.title);
-      const evidence = node("span", badgeClass(action.evidence_kind), action.evidence_kind);
-      header.append(heading, evidence);
-      lab.append(header, node("p", "", action.description));
-
-      const compare = node("div", "grid-2");
-      const before = node("section", "fact");
-      before.append(node("h4", "", "Before"), node("pre", "", action.before || "No materialized form"));
-      const after = node("section", "fact");
-      after.append(node("h4", "", "After"), node("pre", "", action.after || "No materialized form"));
-      compare.append(before, after);
-      lab.append(compare);
-
-      if (optimizer) {
-        const facts = node("div", "fact-grid");
-        const values = [
-          ["Traversal", action.traversal.join(" → ")],
-          ["Predicate", action.predicate],
-          ["Why applicable", action.applicability],
-          ["Optimizes", action.optimization]
-        ];
-        for (const [label, value] of values) {
-          const fact = node("div", "fact");
-          fact.append(node("strong", "", label), node("span", "", value));
-          facts.append(fact);
-        }
-        lab.append(facts);
-      }
-      lab.append(linksBlock(action.source_links));
-      return lab;
-    }
-
-    function renderPhysical(stage) {
-      const wrapper = node("section", "lab");
-      const status = stage.physical_plan.complete ? "Complete physical plan" : "Estimated physical plan";
-      wrapper.append(node("h3", "", `${status} · ${stage.physical_plan.operator_count} operators`));
-      const tree = node("div", "tree");
-      const list = node("ul");
-      function renderOperator(operator) {
-        const item = node("li");
-        const card = node("article", "tree-node");
-        card.append(
-          node("code", "", operator.operator_id),
-          node("h4", "", operator.name),
-          node("p", "", operator.details),
-          linksBlock(operator.source_links)
-        );
-        item.append(card);
-        if (operator.children.length) {
-          const children = node("ul");
-          for (const child of operator.children) children.append(renderOperator(child));
-          item.append(children);
-        }
-        return item;
-      }
-      list.append(renderOperator(stage.physical_plan.root));
-      tree.append(list);
-      wrapper.append(tree);
-      return wrapper;
-    }
-
-    function renderExecutionEvent(event) {
-      const panel = node("article", "event-panel");
-      panel.append(node("div", "eyebrow", event.user_event), node("h3", "", event.title), node("p", "", event.description));
-
-      const stackHeap = node("div", "stack-heap");
-      const stack = node("section", "lab");
-      stack.id = "conceptual-call-stack";
-      stack.append(node("h4", "", "Conceptual mixed-language call stack"));
-      const stackList = node("div", "stack-list");
-      for (const frame of event.call_stack) {
-        const card = node("article", "stack-frame");
-        card.append(node("span", "language", frame.language), node("p", "", frame.frame), linksBlock(frame.source_links));
-        stackList.append(card);
-      }
-      stack.append(stackList);
-
-      const heap = node("section", "lab");
-      heap.id = "heap-lifetime-zones";
-      heap.append(node("h4", "", "Heap and query-lifetime zones"));
-      const heapList = node("div", "heap-list");
-      if (!event.heap_zones.length) heapList.append(node("p", "muted", "No applicable heap zone is evidenced for this event."));
-      for (const zone of event.heap_zones) {
-        const card = node("article", "heap-zone");
-        card.append(
-          node("span", "language", zone.language),
-          node("span", "state", ` ${zone.state}`),
-          node("h4", "", zone.zone),
-          node("p", "", zone.details),
-          node("p", "muted", `Evidence basis: ${zone.evidence_basis}`),
-          linksBlock(zone.source_links)
-        );
-        heapList.append(card);
-      }
-      heap.append(heapList);
-      stackHeap.append(stack, heap);
-      panel.append(stackHeap);
-
-      const components = node("section", "lab");
-      components.id = "runtime-components";
-      components.append(node("h4", "", "Runtime components below stack and heap"));
-      const componentList = node("div", "component-list");
-      for (const component of event.components) {
-        const card = node("article", "component");
-        card.append(node("h4", "", component.name), node("p", "", component.role));
-        const facts = node("dl");
-        const values = [
-          ["Pull direction", component.pull_direction],
-          ["Data direction", component.data_direction],
-          ["Ownership now", component.ownership_now],
-          ["Next breakpoint", component.next_breakpoint],
-          ["Failure", component.failure],
-          ["Cancellation", component.cancellation],
-          ["Lifetime", component.lifetime]
-        ];
-        for (const [label, value] of values) facts.append(node("dt", "", label), node("dd", "", value));
-        card.append(facts, linksBlock(component.source_links));
-        componentList.append(card);
-      }
-      components.append(componentList);
-      panel.append(components, linksBlock(event.source_links));
-      return panel;
-    }
-
-    function renderExecution(stage, content) {
-      const layout = node("div", "execution-layout");
-      const nav = node("nav", "timeline-nav");
-      nav.setAttribute("aria-label", "User-driven execution timeline");
-      stage.timeline.forEach((event, index) => {
-        const button = node("button", "timeline-button");
-        button.type = "button";
-        button.setAttribute("aria-selected", String(index === eventIndex));
-        button.append(node("small", "", `Event ${index + 1}`), node("strong", "", event.title));
-        button.addEventListener("click", () => { eventIndex = index; renderStage(); });
-        nav.append(button);
-      });
-      layout.append(nav, renderExecutionEvent(stage.timeline[eventIndex]));
-      content.append(layout);
-    }
-
-    function renderStage() {
-      const stage = model.stages[stageIndex];
-      byId("stage-number").textContent = `Phase ${stage.order} of 10`;
-      byId("stage-title").textContent = stage.title;
-      byId("stage-summary").textContent = stage.summary;
-      byId("stage-badge").textContent = stage.evidence_kind;
-      byId("stage-badge").className = badgeClass(stage.evidence_kind);
-      byId("no-op").hidden = !stage.no_op_explanation;
-      byId("no-op").textContent = stage.no_op_explanation ? `Why this is a no-op: ${stage.no_op_explanation}` : "";
-      addLinks(byId("stage-links"), stage.source_links);
-
-      [...byId("stage-nav").children].forEach((button, index) => {
-        button.setAttribute("aria-selected", String(index === stageIndex));
-      });
-      const actionNav = byId("action-nav");
-      clear(actionNav);
-      const content = byId("stage-content");
-      clear(content);
-
-      if (stage.kind === "physical") {
-        content.append(renderPhysical(stage));
-        return;
-      }
-      if (stage.kind === "execute") {
-        eventIndex = Math.min(eventIndex, stage.timeline.length - 1);
-        renderExecution(stage, content);
-        return;
-      }
-
-      const actions = stage.kind === "serialization" ? stage.boundaries : stage.actions;
-      if (!actions.length) return;
-      actionIndex = Math.min(actionIndex, actions.length - 1);
-      actions.forEach((action, index) => {
-        const button = node("button", "action-button");
-        button.type = "button";
-        button.setAttribute("aria-selected", String(index === actionIndex));
-        button.append(node("small", "", `${stage.kind === "optimizer" ? "Applicable pass" : "Substep"} ${index + 1}`), node("strong", "", action.title));
-        button.addEventListener("click", () => { actionIndex = index; renderStage(); });
-        actionNav.append(button);
-      });
-      content.append(renderAction(actions[actionIndex], stage.kind === "optimizer"));
-    }
-
+    updateNetwork(model.network_beacon.state, model.network_beacon.route, model.network_beacon.purpose);
     model.stages.forEach((stage, index) => {
-      const button = node("button", "stage-button");
-      button.type = "button";
-      button.setAttribute("aria-selected", String(index === 0));
-      button.append(node("small", "", `Phase ${stage.order}`), node("strong", "", stage.title));
-      button.addEventListener("click", () => {
-        stageIndex = index;
-        actionIndex = 0;
-        eventIndex = 0;
-        renderStage();
-      });
-      byId("stage-nav").append(button);
+      byId("stage-nav").append(railButton(`Phase ${stage.order}`, stage.title, index === 0, () => selectStage(index), [stage.evidence_kind]));
     });
+    bindControls();
     renderStage();
+    window.walkthroughApp = Object.freeze({
+      featureIds: FEATURE_IDS,
+      snapshot: () => ({ ...state, playTimer: Boolean(state.playTimer) }),
+      selectStage,
+      selectSubstep,
+      changeRunner
+    });
+    if (window.location.hash === "#smoke") {
+      const before = JSON.stringify(window.walkthroughApp.snapshot());
+      const expectedLab = {
+        compiler: "compiler-lab",
+        pass: "pass-lab",
+        physical: "physical-lab",
+        boundary: "boundary-lab",
+        execute: "execute-lab"
+      };
+      const visited = [];
+      let failure = "";
+      try {
+        model.stages.forEach((stage, stageIndex) => {
+          selectStage(stageIndex);
+          stage.substeps.forEach((substep, substepIndex) => {
+            selectSubstep(substepIndex);
+            const runner = substep.runner;
+            const expected = expectedLab[runner.type];
+            if (!expected || !byId(expected)) throw new Error(`Missing rendered ${runner.type} lab.`);
+            const initial = JSON.stringify(window.walkthroughApp.snapshot());
+            changeRunner(1);
+            const changed = JSON.stringify(window.walkthroughApp.snapshot());
+            if (runner.snapshots.length > 1 && initial === changed) {
+              throw new Error(`Runner state did not change for ${stage.id}/${substep.id}.`);
+            }
+            visited.push(`${stage.id}/${substep.id}:${runner.type}`);
+          });
+        });
+      } catch (error) {
+        failure = error instanceof Error ? error.message : String(error);
+      }
+      const after = JSON.stringify(window.walkthroughApp.snapshot());
+      const passed = !failure && visited.length >= model.stages.length && before !== after;
+      const result = node("output", "", passed
+        ? `PASS: interactive state changed across ${visited.length} substeps`
+        : `FAIL: ${failure || "interactive state did not change"}`);
+      result.id = "browser-smoke-result";
+      result.dataset.before = before;
+      result.dataset.after = after;
+      result.dataset.visited = visited.join(",");
+      document.body.append(result);
+    }
   </script>
 </body>
 </html>

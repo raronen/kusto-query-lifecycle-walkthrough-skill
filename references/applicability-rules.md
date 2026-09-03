@@ -3,7 +3,7 @@
 ## Optimizer labs
 
 Include an optimizer action only when the supplied query and evidence establish applicability.
-Each action requires:
+Put each applicable action in the relevant query-specific substep runner. Each action requires:
 
 - before and after representations;
 - traversal order or visited nodes;
@@ -18,11 +18,16 @@ change to that pass. Use `SCHEDULED_NO_OP` when scheduling is evidenced but befo
 are identical. Do not create a generic catalog of passes or a pass runner for irrelevant
 optimizations.
 
+Every optimizer phase still has at least one query-specific substep. If the phase schedules no
+applicable transformation, its pass runner must show the evaluated evidence gates, the
+unchanged before/after artifact, and the precise reason each gate prevents a rewrite.
+
 ## No-op phases
 
 All ten phases remain visible. A no-op explanation must identify the relevant query shape and
 the missing trigger, work item, or boundary. Avoid vague text such as "nothing happened" or
-"not applicable."
+"not applicable." Every no-op substep retains traversal, artifact, experiment, and runner
+controls so the user can inspect why the phase does not transform or execute work.
 
 ## Physical plan
 

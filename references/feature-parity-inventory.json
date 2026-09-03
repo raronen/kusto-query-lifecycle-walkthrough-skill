@@ -1,0 +1,351 @@
+{
+  "version": 1,
+  "scope": "Reusable generic UI and interaction architecture only",
+  "prohibited_material": [
+    "query-specific canonical content",
+    "proprietary raw plans",
+    "internal logs",
+    "credentials",
+    "fixed source commits"
+  ],
+  "baseline_static_counts": {
+    "canonical": {
+      "bytes": 427809,
+      "lines": 6741,
+      "buttons": 31,
+      "range_inputs": 4,
+      "details": 4,
+      "links": 7,
+      "navs": 7,
+      "sections": 34,
+      "script_functions": 71,
+      "ids": 167,
+      "remote_dependencies": 0
+    },
+    "deficient_generated_sample": {
+      "bytes": 88448,
+      "lines": 482,
+      "buttons": 0,
+      "range_inputs": 0,
+      "details": 0,
+      "links": 0,
+      "navs": 2,
+      "sections": 2,
+      "script_functions": 6,
+      "ids": 18,
+      "remote_dependencies": 0
+    },
+    "counting_note": "Counts describe static HTML markup. Both pages also construct data-driven content in JavaScript."
+  },
+  "canonical_semantic_inventory": {
+    "navigation": [
+      "ten-stage rail",
+      "previous and next stage",
+      "horizontal substep rail",
+      "previous and next substep",
+      "substep range slider",
+      "in-place substep updates"
+    ],
+    "stage_overview": [
+      "collapsible overview",
+      "input",
+      "output",
+      "owner",
+      "not responsible",
+      "handoff",
+      "evidence badge",
+      "no-op explanation"
+    ],
+    "substep_detail": [
+      "behavior badge",
+      "change badge",
+      "runner count",
+      "what happens",
+      "why",
+      "debug",
+      "next",
+      "method path",
+      "exact source links"
+    ],
+    "traversal": [
+      "linked tree",
+      "current node",
+      "movement",
+      "return",
+      "next",
+      "previous",
+      "play or pause",
+      "range slider",
+      "next"
+    ],
+    "artifact": [
+      "collapsible before and after",
+      "operator links",
+      "operator state",
+      "no-op equality"
+    ],
+    "runner_systems": [
+      "compiler",
+      "pass pipeline",
+      "physical plan",
+      "serialization or native boundary",
+      "execute"
+    ],
+    "runner_controls": [
+      "reset",
+      "previous",
+      "next",
+      "apply or execute or play",
+      "range slider",
+      "action rail",
+      "progress",
+      "status",
+      "experiment selector",
+      "experiment result"
+    ],
+    "panel_families": [
+      "stage overview",
+      "substep detail",
+      "traversal",
+      "artifact",
+      "runner state",
+      "compiler mapping",
+      "pass pipeline",
+      "additional context",
+      "physical input contract",
+      "physical full-plan deep dive",
+      "boundary lanes and representations",
+      "execution stack and heap",
+      "runtime components and scenarios"
+    ],
+    "collapsibles": [
+      "stage overview",
+      "before and after artifact",
+      "physical input contract",
+      "physical full-plan deep dive"
+    ],
+    "status_surfaces": [
+      "evidence mode",
+      "stage evidence badge",
+      "substep behavior badge",
+      "substep change badge",
+      "runner type",
+      "runner progress",
+      "runner state",
+      "traversal status",
+      "network state"
+    ],
+    "source_link_surfaces": [
+      "stage",
+      "substep",
+      "traversal node",
+      "artifact operator",
+      "runner action",
+      "runner experiment",
+      "compiler action",
+      "compiler mapping",
+      "pass",
+      "additional context",
+      "physical input contract",
+      "physical operator",
+      "logical-to-physical mapping",
+      "sanitized raw-plan section",
+      "boundary lane",
+      "boundary representation",
+      "boundary byte range",
+      "boundary selectable view",
+      "boundary context comparison",
+      "boundary failure injection",
+      "boundary debugger map",
+      "execution event",
+      "execution language lane",
+      "execution stack frame",
+      "execution heap zone",
+      "execution component",
+      "execution scenario"
+    ],
+    "tree_and_data_visualizations": [
+      "traversal tree",
+      "before and after artifact",
+      "pass cumulative diff",
+      "full physical operator tree",
+      "logical-to-physical mapping",
+      "managed JSON UTF-8 native lanes",
+      "node byte ranges",
+      "mixed-language call stack",
+      "heap and query-lifetime zones",
+      "runtime component state"
+    ],
+    "accessibility_and_output": [
+      "semantic landmarks",
+      "ARIA labels and selected state",
+      "keyboard arrow navigation",
+      "visible focus",
+      "reduced motion",
+      "responsive grids",
+      "print layout",
+      "offline self-contained output"
+    ]
+  },
+  "previous_sample_gaps": [
+    "no stage overview contract",
+    "no query-specific substep system",
+    "no traversal runner",
+    "no collapsible artifact system",
+    "no compiler lab",
+    "no pass pipeline lab",
+    "no physical input contract or rich deep dive",
+    "no serialization lane lab",
+    "no interactive execution stack, heap, component, and scenario lab",
+    "no network beacon",
+    "no interactive experiments",
+    "no keyboard and range-control interaction system"
+  ],
+  "required_feature_ids": [
+    "network-beacon",
+    "stage-navigation",
+    "stage-overview",
+    "stage-overview-toggle",
+    "stage-overview-grid",
+    "substep-rail",
+    "substep-prev",
+    "substep-slider",
+    "substep-next",
+    "substep-detail",
+    "traversal-lab",
+    "traversal-prev",
+    "traversal-play",
+    "traversal-slider",
+    "traversal-next",
+    "artifact-panel",
+    "runner-lab",
+    "runner-reset",
+    "runner-prev",
+    "runner-next",
+    "runner-apply",
+    "runner-slider",
+    "runner-action-rail",
+    "additional-context",
+    "compiler-lab",
+    "pass-lab",
+    "physical-lab",
+    "physical-deep-dive",
+    "boundary-lab",
+    "execute-lab",
+    "conceptual-call-stack",
+    "heap-lifetime-zones",
+    "runtime-components"
+  ],
+  "stage_contract": {
+    "count": 10,
+    "titles": [
+      "Syntax",
+      "Semantic",
+      "Relop",
+      "Preparation",
+      "Initial optimize",
+      "Partial queries",
+      "Final optimize",
+      "Physical plan",
+      "Serialize/native boundary",
+      "Execute"
+    ],
+    "overview_fields": [
+      "input",
+      "output",
+      "owner",
+      "not_responsible",
+      "handoff"
+    ],
+    "substep_fields": [
+      "behavior",
+      "change_badge",
+      "what_happens",
+      "why",
+      "debug",
+      "next",
+      "method_path",
+      "source_links",
+      "traversal",
+      "artifact",
+      "runner"
+    ]
+  },
+  "runner_contract": {
+    "common_controls": [
+      "reset",
+      "previous",
+      "next",
+      "apply_or_execute",
+      "slider",
+      "action_rail"
+    ],
+    "types": {
+      "compiler": [
+        "before_after_states",
+        "progress",
+        "exact_source",
+        "per_substep_experiments",
+        "semantic_or_relop_mapping_when_applicable"
+      ],
+      "pass": [
+        "applicable_passes_only",
+        "cumulative_diff",
+        "pass_source",
+        "node_traversal",
+        "predicate",
+        "applicability",
+        "optimization",
+        "result",
+        "scheduled_no_op"
+      ],
+      "physical": [
+        "input_contract",
+        "before_after_states",
+        "complete_plan",
+        "logical_physical_mapping",
+        "schemas",
+        "node_ids",
+        "key_indexes",
+        "execution_rust_eligibility",
+        "target_scope",
+        "remote_query_metadata",
+        "optional_evidenced_raw_sections"
+      ],
+      "boundary": [
+        "managed_lane",
+        "json_lane",
+        "utf8_lane",
+        "native_lane",
+        "node_byte_ranges",
+        "selectable_views",
+        "context_comparison",
+        "failure_injection",
+        "debugger_map"
+      ],
+      "execute": [
+        "user_event_timeline",
+        "language_lanes",
+        "conceptual_stack_top_first",
+        "heap_lifetime_zones",
+        "lifetime_states",
+        "runtime_components_below_stack_heap",
+        "failure_cancellation_memory_lifetime_scenarios",
+        "pull_direction",
+        "data_direction",
+        "ownership",
+        "next_breakpoint"
+      ]
+    }
+  },
+  "interaction_invariants": [
+    "Every complete-model substep has exactly one runner configuration.",
+    "Every runner exposes at least two distinct snapshots.",
+    "Every runner control changes visible state or is disabled at a boundary.",
+    "Substep changes update content in place without scrolling.",
+    "No-op substeps retain runners and expose evidence gates and reasons.",
+    "Runtime components render after stack and heap regions.",
+    "Every action and operator source link is HTTPS, exact-line, and current-HEAD pinned.",
+    "No remote runtime dependency is required."
+  ]
+}

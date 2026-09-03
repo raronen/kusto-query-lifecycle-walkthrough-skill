@@ -64,13 +64,17 @@ links.
    [references/evidence-model.schema.json](references/evidence-model.schema.json). Preserve
    exactly these phases in order: Syntax, Semantic, Relop, Preparation, Initial optimize,
    Partial queries, Final optimize, Physical plan, Serialize/native boundary, Execute.
-6. Follow [references/applicability-rules.md](references/applicability-rules.md). Keep no-op
+6. Follow [references/feature-parity-contract.md](references/feature-parity-contract.md).
+   Every phase needs query-specific substeps, and every substep needs a phase-appropriate
+   interactive `Run the ... yourself` runner. Missing runners are invalid. No-op substeps keep
+   their runner and expose the evidence gates and reasons that prevent work.
+7. Follow [references/applicability-rules.md](references/applicability-rules.md). Keep no-op
    phases with a precise query-specific explanation. Include optimizer labs only for
    applicable passes. Distinguish `TRANSFORMED` from `SCHEDULED_NO_OP`.
-7. If real plan evidence is unavailable, set top-level `evidence_mode` to `ESTIMATED`, state
+8. If real plan evidence is unavailable, set top-level `evidence_mode` to `ESTIMATED`, state
    the reason, and keep every unsupported claim visibly estimated. Never blend estimated
    claims into observed evidence.
-8. Validate and render against the same workspace:
+9. Validate and render against the same workspace:
 
    ```powershell
    python scripts\render_walkthrough.py `
@@ -78,9 +82,9 @@ links.
      --source-workspace "<Azure-Kusto-Service-workspace>"
    ```
 
-9. Inspect the generated page against
+10. Inspect the generated page against
    [references/artifact-quality.md](references/artifact-quality.md).
-10. Publish only through:
+11. Publish only through:
 
     ```powershell
     .\scripts\Publish-Walkthrough.ps1 `
@@ -99,6 +103,8 @@ Do not claim success unless all are true:
 - the page exists under `Documents\Bookmarks\<query-derived-slug>\<slug>.html`;
 - the page visibly says `EVIDENCE` or `ESTIMATED`;
 - every operator/action link is absolute, line-specific, and pinned to current workspace HEAD;
+- every one of the ten phases has query-specific substeps and every substep has a validated
+  interactive runner;
 - the bookmark publisher ran for that page;
 - `CompanionResult.ok` is exactly `true`.
 
