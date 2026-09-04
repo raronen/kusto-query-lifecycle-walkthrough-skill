@@ -268,7 +268,7 @@
       "source_links",
       "traversal",
       "artifact",
-      "runner"
+      "runner (omitted only at S4.1, S4.4, S6.1, and S6.2)"
     ]
   },
   "runner_contract": {
@@ -339,11 +339,11 @@
     }
   },
   "interaction_invariants": [
-    "Every complete-model substep has exactly one runner configuration.",
+    "Exactly 41 canonical substeps have one runner; S4.1, S4.4, S6.1, and S6.2 have none.",
     "Every runner exposes at least two distinct snapshots.",
     "Every runner control changes visible state or is disabled at a boundary.",
     "Substep changes update content in place without scrolling.",
-    "No-op substeps retain runners and expose evidence gates and reasons.",
+    "Runner-bearing no-op substeps expose evidence gates and reasons; canonical runner-less substeps render no lab or placeholder.",
     "Runtime components render after stack and heap regions.",
     "Every action and operator source link is HTTPS, exact-line, and current-HEAD pinned.",
     "No remote runtime dependency is required."

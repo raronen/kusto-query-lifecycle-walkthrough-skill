@@ -13,6 +13,7 @@ from model_contract import (
     validate_complete_model,
     verify_source_workspace,
 )
+from spec_compliance import audit_rendered_html
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,7 +31,7 @@ def documents_root() -> Path:
     raise ModelError("Neither OneDrive Documents nor local Documents exists.")
 
 
-def render(model: dict, output: Path, source_workspace: Path) -> None:
+def render(model: dict, output: Path, source_workspace: Path) -> dict:
     validate_complete_model(model)
     verify_source_workspace(source_workspace, model)
     template = TEMPLATE_PATH.read_text(encoding="utf-8")
@@ -47,7 +48,13 @@ def render(model: dict, output: Path, source_workspace: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".html.tmp")
     temporary.write_text(template, encoding="utf-8", newline="\n")
+    try:
+        compliance = audit_rendered_html(template)
+    except (ModelError, OSError, json.JSONDecodeError):
+        temporary.unlink(missing_ok=True)
+        raise
     os.replace(temporary, output)
+    return compliance
 
 
 def main() -> int:
@@ -73,7 +80,7 @@ def main() -> int:
                 else documents_root() / "Bookmarks"
             )
             output = root / slug / f"{slug}.html"
-        render(model, output, Path(args.source_workspace))
+        compliance = render(model, output, Path(args.source_workspace))
     except (ModelError, OSError) as exc:
         parser.exit(2, f"error: {exc}\n")
 
@@ -85,6 +92,7 @@ def main() -> int:
                 "title": model["query"]["title"],
                 "slug": model["query"]["slug"],
                 "evidence_mode": model["evidence_mode"],
+                "compliance": compliance,
             }
         )
     )

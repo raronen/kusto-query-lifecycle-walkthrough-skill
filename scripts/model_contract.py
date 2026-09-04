@@ -9,6 +9,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 from urllib.parse import parse_qs, urlparse
 
+from canonical_spec import BOUNDARY_LANES_BY_KEY, CANONICAL_SUBSTEPS
+
 
 STAGES = (
     ("syntax", "Syntax", "standard"),
@@ -24,16 +26,8 @@ STAGES = (
 )
 
 RUNNER_TYPES = {
-    "syntax": "compiler",
-    "semantic": "compiler",
-    "relop": "compiler",
-    "preparation": "pass",
-    "initial-optimize": "pass",
-    "partial-queries": "pass",
-    "final-optimize": "pass",
-    "physical-plan": "physical",
-    "serialize-native-boundary": "boundary",
-    "execute": "execute",
+    stage_id: tuple(substep.runner_type for substep in CANONICAL_SUBSTEPS[index])
+    for index, (stage_id, _title, _kind) in enumerate(STAGES)
 }
 
 EVIDENCE_KINDS = {
@@ -492,6 +486,7 @@ def _validate_runner_action(
     location: str,
     *,
     require_pass_fields: bool = False,
+    require_boundary_lane: bool = False,
 ) -> None:
     action = _shape(
         value,
@@ -509,7 +504,7 @@ def _validate_runner_action(
             "source_links",
         ),
         location,
-        optional=("traversal", "predicate", "applicability", "optimization"),
+        optional=("traversal", "predicate", "applicability", "optimization", "lane"),
     )
     _identifier(action["id"], f"{location}.id")
     for key in ("title", "what", "why", "result", "stack_effect", "heap_effect"):
@@ -523,6 +518,11 @@ def _validate_runner_action(
             _text(action.get(key), f"{location}.{key}")
     elif any(key in action for key in pass_fields):
         raise ModelError(f"{location} contains pass-only fields outside a pass runner.")
+    if require_boundary_lane:
+        if action.get("lane") not in {"C#", "Interop", "C++"}:
+            raise ModelError(f"{location}.lane must be C#, Interop, or C++.")
+    elif "lane" in action:
+        raise ModelError(f"{location}.lane is valid only for a boundary runner.")
     _links(action["source_links"], head, project, f"{location}.source_links")
 
 
@@ -639,7 +639,7 @@ def _validate_compiler(
     expected_mode = {
         "syntax": "syntax",
         "semantic": "semantic",
-        "relop": "csl-to-relop",
+        "relop": "relop",
     }[stage_id]
     if compiler["mode"] != expected_mode:
         raise ModelError(f"{location}.mode must be '{expected_mode}' for {stage_id}.")
@@ -1127,6 +1127,8 @@ def _validate_execute(
     head: str,
     project: str,
     location: str,
+    expected_events: int,
+    expected_scenarios: int,
 ) -> None:
     execute = _shape(
         value,
@@ -1143,6 +1145,10 @@ def _validate_execute(
     timeline = _list(
         execute["action_timeline"], f"{location}.action_timeline", nonempty=True
     )
+    if len(timeline) != expected_events:
+        raise ModelError(
+            f"{location}.action_timeline must contain exactly {expected_events} canonical events."
+        )
     for index, event_value in enumerate(timeline):
         event_location = f"{location}.action_timeline[{index}]"
         event = _shape(
@@ -1154,6 +1160,10 @@ def _validate_execute(
                 "why",
                 "stack_effect",
                 "heap_effect",
+                "lang",
+                "memory",
+                "active",
+                "live",
                 "source_links",
             ),
             event_location,
@@ -1161,6 +1171,29 @@ def _validate_execute(
         _identifier(event["id"], f"{event_location}.id")
         for key in ("title", "what", "why", "stack_effect", "heap_effect"):
             _text(event[key], f"{event_location}.{key}")
+        if event["lang"] not in {"cpp", "rust", "csharp"}:
+            raise ModelError(f"{event_location}.lang is invalid.")
+        memory_events = _list(event["memory"], f"{event_location}.memory")
+        for memory_index, memory_value in enumerate(memory_events):
+            memory_location = f"{event_location}.memory[{memory_index}]"
+            memory = _shape(
+                memory_value,
+                ("op", "zone", "id", "title", "detail"),
+                memory_location,
+            )
+            if memory["op"] not in {"add", "update", "release"}:
+                raise ModelError(f"{memory_location}.op is invalid.")
+            if memory["zone"] not in {"managed", "borrowed", "cpp", "rust"}:
+                raise ModelError(f"{memory_location}.zone is invalid.")
+            _identifier(memory["id"], f"{memory_location}.id")
+            _text(memory["title"], f"{memory_location}.title")
+            _text(memory["detail"], f"{memory_location}.detail")
+        _identifier(event["active"], f"{event_location}.active")
+        live_components = _list(event["live"], f"{event_location}.live")
+        for live_index, component_id in enumerate(live_components):
+            _identifier(component_id, f"{event_location}.live[{live_index}]")
+        if len(set(live_components)) != len(live_components):
+            raise ModelError(f"{event_location}.live must not contain duplicates.")
         _links(event["source_links"], head, project, f"{event_location}.source_links")
     _unique(timeline, lambda item: item["id"], f"{location}.action_timeline", "event id")
 
@@ -1185,7 +1218,7 @@ def _validate_execute(
         frame_location = f"{location}.call_stack[{index}]"
         frame = _shape(
             frame_value,
-            ("position", "language", "frame", "what", "why", "source_links"),
+            ("position", "language", "kind", "frame", "what", "why", "source_links"),
             frame_location,
         )
         if frame["position"] != index:
@@ -1194,6 +1227,8 @@ def _validate_execute(
             )
         if frame["language"] not in lane_languages:
             raise ModelError(f"{frame_location}.language lacks an applicable language lane.")
+        if frame["kind"] not in {"cpp", "csharp", "rust", "abi"}:
+            raise ModelError(f"{frame_location}.kind is invalid.")
         for key in ("frame", "what", "why"):
             _text(frame[key], f"{frame_location}.{key}")
         _links(frame["source_links"], head, project, f"{frame_location}.source_links")
@@ -1205,6 +1240,7 @@ def _validate_execute(
             zone_value,
             (
                 "id",
+                "zone",
                 "language",
                 "state",
                 "what",
@@ -1215,6 +1251,8 @@ def _validate_execute(
             zone_location,
         )
         _identifier(zone["id"], f"{zone_location}.id")
+        if zone["zone"] not in {"managed", "borrowed", "cpp", "rust"}:
+            raise ModelError(f"{zone_location}.zone is invalid.")
         if zone["language"] not in lane_languages:
             raise ModelError(f"{zone_location}.language lacks an applicable language lane.")
         if zone["state"] not in HEAP_STATES:
@@ -1222,6 +1260,10 @@ def _validate_execute(
         for key in ("what", "why", "owner"):
             _text(zone[key], f"{zone_location}.{key}")
         _links(zone["source_links"], head, project, f"{zone_location}.source_links")
+    if [zone["zone"] for zone in zones] != ["managed", "borrowed", "cpp", "rust"]:
+        raise ModelError(
+            f"{location}.heap_zones must preserve managed, borrowed, cpp, rust order."
+        )
 
     components = _list(
         execute["components"], f"{location}.components", nonempty=True
@@ -1271,8 +1313,20 @@ def _validate_execute(
             f"{component_location}.source_links",
         )
     _unique(components, lambda item: item["id"], f"{location}.components", "component id")
+    component_ids = {component["id"] for component in components}
+    for index, event in enumerate(timeline):
+        referenced = {event["active"], *event["live"]}
+        dangling = sorted(referenced - component_ids)
+        if dangling:
+            raise ModelError(
+                f"{location}.action_timeline[{index}] references absent components {dangling}."
+            )
 
     scenarios = _list(execute["scenarios"], f"{location}.scenarios", nonempty=True)
+    if len(scenarios) != expected_scenarios:
+        raise ModelError(
+            f"{location}.scenarios must contain exactly {expected_scenarios} canonical scenarios."
+        )
     scenario_types: set[str] = set()
     for index, scenario_value in enumerate(scenarios):
         scenario_location = f"{location}.scenarios[{index}]"
@@ -1281,9 +1335,15 @@ def _validate_execute(
             ("type", "trigger", "behavior", "ownership_effect", "source_links"),
             scenario_location,
         )
-        if scenario["type"] not in {"failure", "cancellation", "memory", "lifetime"}:
+        if scenario["type"] not in {
+            "failure",
+            "cancellation",
+            "memory",
+            "lifetime",
+            "memory/lifetime",
+        }:
             raise ModelError(f"{scenario_location}.type is invalid.")
-        scenario_types.add(scenario["type"])
+        scenario_types.update(scenario["type"].split("/"))
         for key in ("trigger", "behavior", "ownership_effect"):
             _text(scenario[key], f"{scenario_location}.{key}")
         _links(scenario["source_links"], head, project, f"{scenario_location}.source_links")
@@ -1304,6 +1364,11 @@ def _validate_runner(
     project: str,
     location: str,
     evidence_refs: set[str],
+    expected_runner_type: str,
+    expected_item_count: int,
+    expected_runner_mode: str,
+    expected_scenario_count: int,
+    expected_key: str,
 ) -> None:
     common = (
         "type",
@@ -1314,10 +1379,10 @@ def _validate_runner(
         "no_op",
         "source_links",
     )
-    runner_type = RUNNER_TYPES[stage_id]
+    runner_type = expected_runner_type
     runner = _shape(value, common + (runner_type,), location)
     if runner["type"] != runner_type:
-        raise ModelError(f"{location}.type must be '{runner_type}' for {stage_id}.")
+        raise ModelError(f"{location}.type must be '{runner_type}' for this canonical substep.")
     required_gate = stage_no_op or badge in NO_OP_KINDS
     title = _text(runner["title"], f"{location}.title")
     if not re.fullmatch(r"Run the .+ yourself", title):
@@ -1327,6 +1392,10 @@ def _validate_runner(
             f"{location}.title must identify its '{runner_type}' runner type."
         )
     actions = _list(runner["actions"], f"{location}.actions", nonempty=True)
+    if len(actions) != expected_item_count:
+        raise ModelError(
+            f"{location}.actions must contain exactly {expected_item_count} canonical items."
+        )
     for index, action in enumerate(actions):
         _validate_runner_action(
             action,
@@ -1335,6 +1404,7 @@ def _validate_runner(
             mode,
             f"{location}.actions[{index}]",
             require_pass_fields=runner_type == "pass",
+            require_boundary_lane=runner_type == "boundary",
         )
         if required_gate and action["before"] != action["after"]:
             raise ModelError(
@@ -1345,6 +1415,12 @@ def _validate_runner(
                 f"{location}.actions[{index}].evidence_kind must match its no-op outcome."
             )
     _unique(actions, lambda item: item["id"], f"{location}.actions", "action id")
+    if runner_type == "boundary":
+        actual_lanes = tuple(action["lane"] for action in actions)
+        if actual_lanes != BOUNDARY_LANES_BY_KEY[expected_key]:
+            raise ModelError(
+                f"{location}.actions must preserve the canonical boundary lane distribution."
+            )
     snapshots = _list(runner["snapshots"], f"{location}.snapshots", nonempty=True)
     if len(snapshots) < 2:
         raise ModelError(f"{location}.snapshots must contain at least two snapshots.")
@@ -1407,6 +1483,8 @@ def _validate_runner(
             project,
             f"{location}.compiler",
         )
+        if runner["compiler"]["mode"] != expected_runner_mode:
+            raise ModelError(f"{location}.compiler.mode must be '{expected_runner_mode}'.")
         if required_gate:
             compiler_actions = (
                 runner["compiler"]["before_actions"] + runner["compiler"]["after_actions"]
@@ -1444,6 +1522,8 @@ def _validate_runner(
             head,
             project,
             f"{location}.execute",
+            expected_item_count,
+            expected_scenario_count,
         )
 
 
@@ -1457,6 +1537,12 @@ def _validate_substep(
     project: str,
     location: str,
     evidence_refs: set[str],
+    expected_key: str,
+    expected_title: str,
+    expected_runner_type: str | None,
+    expected_item_count: int,
+    expected_runner_mode: str,
+    expected_scenario_count: int,
 ) -> str:
     required = (
         "id",
@@ -1472,10 +1558,12 @@ def _validate_substep(
         "source_links",
         "traversal",
         "artifact",
-        "runner",
     )
-    substep = _shape(value, required, location)
-    _identifier(substep["id"], f"{location}.id")
+    substep = _shape(value, required, location, optional=("runner",))
+    if substep["id"] != expected_key:
+        raise ModelError(f"{location}.id must be canonical key '{expected_key}'.")
+    if substep["title"] != expected_title:
+        raise ModelError(f"{location}.title must be '{expected_title}'.")
     for key in (
         "title",
         "behavior",
@@ -1489,8 +1577,11 @@ def _validate_substep(
     method_path = _list(
         substep["method_path"], f"{location}.method_path", nonempty=True
     )
-    for index, method in enumerate(method_path):
-        _text(method, f"{location}.method_path[{index}]")
+    for index, method_value in enumerate(method_path):
+        method_location = f"{location}.method_path[{index}]"
+        method = _shape(method_value, ("name", "source_links"), method_location)
+        _text(method["name"], f"{method_location}.name")
+        _links(method["source_links"], head, project, f"{method_location}.source_links")
     badge = _evidence_kind(substep["change_badge"], f"{location}.change_badge", mode)
     if stage_no_op and badge not in NO_OP_KINDS:
         raise ModelError(f"{location}.change_badge must be a no-op when its stage is a no-op.")
@@ -1505,18 +1596,29 @@ def _validate_substep(
         f"{location}.artifact",
         no_op=badge in NO_OP_KINDS,
     )
-    _validate_runner(
-        substep["runner"],
-        stage_id,
-        badge,
-        stage_no_op,
-        plan_count,
-        mode,
-        head,
-        project,
-        f"{location}.runner",
-        evidence_refs,
-    )
+    if expected_runner_type is None:
+        if "runner" in substep:
+            raise ModelError(f"{location}.runner must be omitted for this canonical substep.")
+    else:
+        if "runner" not in substep:
+            raise ModelError(f"{location}.runner is required for this canonical substep.")
+        _validate_runner(
+            substep["runner"],
+            stage_id,
+            badge,
+            stage_no_op,
+            plan_count,
+            mode,
+            head,
+            project,
+            f"{location}.runner",
+            evidence_refs,
+            expected_runner_type,
+            expected_item_count,
+            expected_runner_mode,
+            expected_scenario_count,
+            expected_key,
+        )
     return badge
 
 
@@ -1641,9 +1743,11 @@ def validate_complete_model(model: dict[str, Any]) -> None:
             )
         _links(stage["source_links"], head, project, f"{location}.source_links")
         _validate_overview(stage["overview"], f"{location}.overview")
-        if expected_kind == "optimizer":
+        if expected_kind == "optimizer" or expected_id == "preparation":
             if "additional_context" not in stage:
-                raise ModelError(f"{location}.additional_context is required for optimizer stages.")
+                raise ModelError(
+                    f"{location}.additional_context is required for preparation and optimizer stages."
+                )
             _validate_additional_context(
                 stage["additional_context"],
                 head,
@@ -1658,6 +1762,11 @@ def validate_complete_model(model: dict[str, Any]) -> None:
                 f"{location}.additional_context",
             )
         substeps = _list(stage["substeps"], f"{location}.substeps", nonempty=True)
+        expected_substeps = CANONICAL_SUBSTEPS[index]
+        if len(substeps) != len(expected_substeps):
+            raise ModelError(
+                f"{location}.substeps must contain exactly {len(expected_substeps)} canonical substeps."
+            )
         badges = [
             _validate_substep(
                 substep,
@@ -1669,8 +1778,16 @@ def validate_complete_model(model: dict[str, Any]) -> None:
                 project,
                 f"{location}.substeps[{substep_index}]",
                 evidence_refs,
+                expected_substep.key,
+                expected_substep.title,
+                expected_substep.runner_type,
+                expected_substep.item_count,
+                expected_substep.runner_mode,
+                expected_substep.scenario_count,
             )
-            for substep_index, substep in enumerate(substeps)
+            for substep_index, (substep, expected_substep) in enumerate(
+                zip(substeps, expected_substeps, strict=True)
+            )
         ]
         _unique(substeps, lambda item: item["id"], f"{location}.substeps", "substep id")
         badge_set = set(badges)

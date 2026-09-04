@@ -149,6 +149,7 @@ finally {
     Ok = $true
     HtmlPath = $renderResult.html_path
     EvidenceMode = $renderResult.evidence_mode
+    Compliance = $renderResult.compliance
     BookmarkStatus = $bookmarkStatus
     BookmarkError = $bookmarkError
     DestinationPath = @('Favorites bar', 'Imported')

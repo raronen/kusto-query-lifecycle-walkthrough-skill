@@ -43,6 +43,14 @@ Read [references/evidence-collection.md](references/evidence-collection.md) befo
 evidence and [references/source-grounding.md](references/source-grounding.md) before creating
 links.
 
+Read the complete
+[authoritative as-built specification](references/query-lifecycle-two-level-walkthrough.spec.md)
+before modeling or rendering. Generated HTML MUST satisfy every applicable normative statement
+and every acceptance item pedantically. Do not summarize, omit, simplify, regularize, or replace
+specified behavior with generic prose. Defects marked `[C]` are normative; only explicit CAVEAT
+remediations are advisory. The
+[compliance manifest](references/spec-compliance-manifest.json) tracks all 93 acceptance items.
+
 ## Workflow
 
 1. Save the exact query text to a temporary local file outside the repository.
@@ -59,15 +67,16 @@ links.
    ```
 
 4. Attempt to collect real non-executing plan evidence. Record the tool, timestamp, and
-   sanitized plan digest, not proprietary raw output.
+   sanitized plan digest. Keep proprietary raw output out of this repository; include a
+   redacted raw-plan section in the local model/page only when authorized and evidence-safe.
 5. Populate the model according to
    [references/evidence-model.schema.json](references/evidence-model.schema.json). Preserve
    exactly these phases in order: Syntax, Semantic, Relop, Preparation, Initial optimize,
    Partial queries, Final optimize, Physical plan, Serialize/native boundary, Execute.
-6. Follow [references/feature-parity-contract.md](references/feature-parity-contract.md).
-   Every phase needs query-specific substeps, and every substep needs a phase-appropriate
-   interactive `Run the ... yourself` runner. Missing runners are invalid. No-op substeps keep
-   their runner and expose the evidence gates and reasons that prevent work.
+6. Follow [references/feature-parity-contract.md](references/feature-parity-contract.md) under
+   the authoritative specification. Emit exactly 45 canonical substeps. Exactly S4.1, S4.4,
+   S6.1, and S6.2 omit the runner, runner badge, lab, and placeholder. Every other substep has
+   its canonical runner family and interaction count.
 7. Follow [references/applicability-rules.md](references/applicability-rules.md). Keep no-op
    phases with a precise query-specific explanation. Include optimizer labs only for
    applicable passes. Distinguish `TRANSFORMED` from `SCHEDULED_NO_OP`.
@@ -106,8 +115,9 @@ Do not claim success unless all are true:
 - the page exists under `Documents\Bookmarks\<query-derived-slug>\<slug>.html`;
 - the page visibly says `EVIDENCE` or `ESTIMATED`;
 - every operator/action link is absolute, line-specific, and pinned to current workspace HEAD;
-- every one of the ten phases has query-specific substeps and every substep has a validated
-  interactive runner;
+- every one of the ten phases has its exact canonical substeps and runner topology;
+- the renderer's authoritative-spec audit reports all 93 requirements automated, zero manual,
+  and no failures;
 
 Walkthrough success does not depend on bookmark publication. Final output must include evidence
 mode, HTML path, bookmark status (`published`, `skipped`, or `failed`), and any publication

@@ -19,9 +19,9 @@ TESTS = ROOT / "tests"
 sys.path[:0] = [str(SCRIPTS), str(TESTS)]
 
 from fixture_factory import QUERY, rich_model
+from canonical_spec import CANONICAL_SUBSTEPS, RUNNERLESS_KEYS
 from model_contract import (
     ModelError,
-    RUNNER_TYPES,
     STAGES,
     query_slug,
     validate_cluster_uri,
@@ -101,6 +101,7 @@ def retarget_model(model: dict, head: str) -> dict:
                             "lineEnd": value["end_line"] + 1,
                             "lineStartColumn": 1,
                             "lineEndColumn": 1,
+                            "syntheticAnchor": value["label"],
                         }
                     )
                 )
@@ -164,14 +165,20 @@ class ContractTests(unittest.TestCase):
     def test_rich_v2_model_validates(self) -> None:
         validate_complete_model(rich_model())
 
-    def test_every_substep_has_phase_specific_runner_and_distinct_states(self) -> None:
+    def test_canonical_substeps_have_exact_runner_topology_and_distinct_states(self) -> None:
         model = rich_model()
-        expected = {stage_id: RUNNER_TYPES[stage_id] for stage_id, _, _ in STAGES}
-        for stage in model["stages"]:
-            self.assertGreaterEqual(len(stage["substeps"]), 1)
-            for substep in stage["substeps"]:
+        self.assertEqual(sum(len(stage["substeps"]) for stage in model["stages"]), 45)
+        for stage, expected_stage in zip(model["stages"], CANONICAL_SUBSTEPS, strict=True):
+            self.assertEqual(len(stage["substeps"]), len(expected_stage))
+            for substep, expected in zip(stage["substeps"], expected_stage, strict=True):
+                self.assertEqual(substep["id"], expected.key)
+                self.assertEqual(substep["title"], expected.title)
+                if expected.runner_type is None:
+                    self.assertNotIn("runner", substep)
+                    continue
                 runner = substep["runner"]
-                self.assertEqual(runner["type"], expected[stage["id"]])
+                self.assertEqual(runner["type"], expected.runner_type)
+                self.assertEqual(len(runner["actions"]), expected.item_count)
                 self.assertRegex(runner["title"], r"^Run the .+ yourself$")
                 self.assertGreaterEqual(len(substep["traversal"]["snapshots"]), 2)
                 self.assertGreaterEqual(len(runner["snapshots"]), 2)
@@ -185,7 +192,20 @@ class ContractTests(unittest.TestCase):
     def test_missing_runner_fails_validation(self) -> None:
         model = rich_model()
         del model["stages"][0]["substeps"][0]["runner"]
-        with self.assertRaisesRegex(ModelError, "missing required fields: runner"):
+        with self.assertRaisesRegex(ModelError, "runner is required"):
+            validate_complete_model(model)
+
+    def test_runner_is_rejected_at_the_four_canonical_omissions(self) -> None:
+        model = rich_model()
+        omissions = {
+            substep["id"]: substep
+            for stage in model["stages"]
+            for substep in stage["substeps"]
+            if "runner" not in substep
+        }
+        self.assertEqual(set(omissions), RUNNERLESS_KEYS)
+        omissions["3-0"]["runner"] = copy.deepcopy(model["stages"][3]["substeps"][1]["runner"])
+        with self.assertRaisesRegex(ModelError, "runner must be omitted"):
             validate_complete_model(model)
 
     def test_wrong_runner_type_fails_validation(self) -> None:
@@ -201,14 +221,14 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ModelError, "must not be empty"):
             validate_complete_model(model)
         partial["no_op_explanation"] = "Synthetic query-specific no-op."
-        partial["substeps"][0]["runner"]["no_op"]["enabled"] = False
+        partial["substeps"][2]["runner"]["no_op"]["enabled"] = False
         with self.assertRaisesRegex(ModelError, "does not match"):
             validate_complete_model(model)
 
     def test_no_op_runner_actions_cannot_claim_transformations(self) -> None:
         model = rich_model()
         partial = model["stages"][5]
-        action = partial["substeps"][0]["runner"]["actions"][0]
+        action = partial["substeps"][2]["runner"]["actions"][0]
         action["evidence_kind"] = "TRANSFORMED"
         with self.assertRaisesRegex(ModelError, "must match its no-op outcome"):
             validate_complete_model(model)
@@ -239,9 +259,7 @@ class ContractTests(unittest.TestCase):
     def test_every_runner_action_must_be_reachable(self) -> None:
         model = rich_model()
         runner = model["stages"][0]["substeps"][0]["runner"]
-        for suffix in ("second", "unreachable"):
-            runner["actions"].append(copy.deepcopy(runner["actions"][0]))
-            runner["actions"][-1]["id"] = f"{suffix}-action"
+        runner["snapshots"].pop()
         with self.assertRaisesRegex(ModelError, "every runner action reachable"):
             validate_complete_model(model)
 
@@ -260,6 +278,12 @@ class ContractTests(unittest.TestCase):
             "?path=/synthetic/Component.cs&version=GBmain"
         )
         with self.assertRaisesRegex(ModelError, "pinned"):
+            validate_complete_model(model)
+
+    def test_every_method_path_entry_requires_its_own_source_link(self) -> None:
+        model = rich_model()
+        model["stages"][0]["substeps"][0]["method_path"][0]["source_links"] = []
+        with self.assertRaisesRegex(ModelError, "must not be empty"):
             validate_complete_model(model)
         model = rich_model()
         link = model["stages"][0]["source_links"][0]
@@ -304,7 +328,69 @@ class ContractTests(unittest.TestCase):
         model = rich_model()
         execute = model["stages"][9]["substeps"][0]["runner"]["execute"]
         execute["scenarios"].pop()
+        with self.assertRaisesRegex(ModelError, "exactly 3 canonical scenarios"):
+            validate_complete_model(model)
+        model = rich_model()
+        execute = model["stages"][9]["substeps"][0]["runner"]["execute"]
+        execute["scenarios"][-1]["type"] = "memory"
         with self.assertRaisesRegex(ModelError, "cover failure, cancellation, memory, and lifetime"):
+            validate_complete_model(model)
+
+    def test_execute_scenario_counts_follow_canonical_topology(self) -> None:
+        model = rich_model()
+        self.assertEqual(
+            [
+                len(substep["runner"]["execute"]["scenarios"])
+                for substep in model["stages"][9]["substeps"]
+            ],
+            [3, 3, 3, 4, 4, 4],
+        )
+        model["stages"][9]["substeps"][0]["runner"]["execute"]["scenarios"].append(
+            copy.deepcopy(
+                model["stages"][9]["substeps"][3]["runner"]["execute"]["scenarios"][-1]
+            )
+        )
+        with self.assertRaisesRegex(ModelError, "exactly 3 canonical scenarios"):
+            validate_complete_model(model)
+
+    def test_execution_domains_and_references_are_enforced(self) -> None:
+        mutations = (
+            ("lang", "managed", "lang is invalid"),
+            ("memory_op", "allocate", "op is invalid"),
+            ("memory_zone", "stack", "zone is invalid"),
+            ("frame_kind", "managed", "kind is invalid"),
+            ("active", "missing-component", "references absent components"),
+        )
+        for field, value, message in mutations:
+            with self.subTest(field=field):
+                model = rich_model()
+                execute = model["stages"][9]["substeps"][0]["runner"]["execute"]
+                if field == "memory_op":
+                    execute["action_timeline"][0]["memory"][0]["op"] = value
+                elif field == "memory_zone":
+                    execute["action_timeline"][0]["memory"][0]["zone"] = value
+                elif field == "frame_kind":
+                    execute["call_stack"][0]["kind"] = value
+                else:
+                    execute["action_timeline"][0][field] = value
+                with self.assertRaisesRegex(ModelError, message):
+                    validate_complete_model(model)
+
+    def test_boundary_action_lanes_are_required_and_bounded(self) -> None:
+        model = rich_model()
+        action = model["stages"][8]["substeps"][0]["runner"]["actions"][0]
+        action.pop("lane")
+        with self.assertRaisesRegex(ModelError, "lane must be C#, Interop, or C\\+\\+"):
+            validate_complete_model(model)
+        model = rich_model()
+        action = model["stages"][8]["substeps"][0]["runner"]["actions"][0]
+        action["lane"] = "Rust"
+        with self.assertRaisesRegex(ModelError, "lane must be C#, Interop, or C\\+\\+"):
+            validate_complete_model(model)
+        model = rich_model()
+        action = model["stages"][8]["substeps"][2]["runner"]["actions"][-1]
+        action["lane"] = "Interop"
+        with self.assertRaisesRegex(ModelError, "canonical boundary lane distribution"):
             validate_complete_model(model)
 
     def test_unexpected_fields_are_rejected(self) -> None:
@@ -333,7 +419,10 @@ class RendererTests(unittest.TestCase):
         cls.source_parent.cleanup()
 
     def test_html_metadata_and_all_ten_phases(self) -> None:
-        self.assertIn("<title>Synthetic Kusto lifecycle walkthrough</title>", self.text)
+        self.assertIn(
+            "<title>Kusto Query Lifecycle: Two-Level Interactive Walkthrough</title>",
+            self.text,
+        )
         self.assertIn("<h1>Synthetic Kusto lifecycle walkthrough</h1>", self.text)
         self.assertRegex(self.text, r'<meta charset="utf-8">')
         self.assertIn('name="walkthrough-evidence-mode" content="EVIDENCE"', self.text)
@@ -358,7 +447,11 @@ class RendererTests(unittest.TestCase):
             output = Path(directory) / "escaped.html"
             render(model, output, self.source_workspace)
             text = output.read_text(encoding="utf-8")
-        self.assertIn("<title>&lt;Unsafe &amp; title&gt;</title>", text)
+        self.assertIn(
+            "<title>Kusto Query Lifecycle: Two-Level Interactive Walkthrough</title>",
+            text,
+        )
+        self.assertIn("<h1>&lt;Unsafe &amp; title&gt;</h1>", text)
         self.assertNotIn("<img src=x", text)
         self.assertNotIn("</script><img", text)
         self.assertIn("\\u003c/script\\u003e", text)
@@ -474,7 +567,7 @@ class ScriptTests(unittest.TestCase):
         payload = json.loads(result.stdout) if result.returncode == 0 else {}
         return result, payload
 
-    def test_scaffolder_creates_v2_draft_with_mandatory_runners(self) -> None:
+    def test_scaffolder_creates_v2_draft_with_canonical_topology(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "draft.json"
             result = self.run_scaffolder("https://example.kusto.windows.net", output)
@@ -486,9 +579,11 @@ class ScriptTests(unittest.TestCase):
         self.assertIs(draft["plan"]["non_executing"], True)
         self.assertEqual(draft["query"]["text"], QUERY)
         self.assertEqual(draft["source"]["workspace_head"], self.source_head)
-        for stage in draft["stages"]:
-            self.assertGreaterEqual(len(stage["substeps"]), 1)
-            self.assertEqual(stage["substeps"][0]["runner"]["type"], RUNNER_TYPES[stage["id"]])
+        self.assertEqual(sum(len(stage["substeps"]) for stage in draft["stages"]), 45)
+        for stage, expected_stage in zip(draft["stages"], CANONICAL_SUBSTEPS, strict=True):
+            for substep, expected in zip(stage["substeps"], expected_stage, strict=True):
+                self.assertEqual(substep["id"], expected.key)
+                self.assertEqual(substep.get("runner", {}).get("type"), expected.runner_type)
 
     def test_scaffolder_accepts_localhost_and_rejects_remote_http(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -610,12 +705,13 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(payload["BookmarkStatus"], "published")
             self.assertIsNone(payload["BookmarkError"])
 
-    def test_json_schema_enforces_v2_runner_and_experiment_contract(self) -> None:
+    def test_json_schema_allows_only_position_validated_runner_omissions(self) -> None:
         schema = json.loads(
             (ROOT / "references" / "evidence-model.schema.json").read_text(encoding="utf-8")
         )
         self.assertIs(schema["additionalProperties"], False)
-        self.assertIn("runner", schema["$defs"]["substep"]["required"])
+        self.assertNotIn("runner", schema["$defs"]["substep"]["required"])
+        self.assertIn("runner", schema["$defs"]["compilerSubsteps"]["items"]["allOf"][1]["required"])
         experiment = schema["$defs"]["experiment"]["properties"]
         self.assertEqual(experiment["options"]["minItems"], 2)
         self.assertEqual(experiment["results"]["minItems"], 2)
@@ -623,6 +719,12 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(runner["actions"]["minItems"], 1)
         self.assertEqual(runner["snapshots"]["minItems"], 2)
         self.assertEqual(runner["experiments"]["minItems"], 1)
+        scenarios = schema["$defs"]["executeRunner"]["properties"]["scenarios"]
+        self.assertEqual((scenarios["minItems"], scenarios["maxItems"]), (3, 4))
+        self.assertEqual(
+            schema["$defs"]["timelineAction"]["properties"]["lang"]["enum"],
+            ["cpp", "rust", "csharp"],
+        )
         component_required = schema["$defs"]["executeComponent"]["required"]
         for field in (
             "evidence_ref",

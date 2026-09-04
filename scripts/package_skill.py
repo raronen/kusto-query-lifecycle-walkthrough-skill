@@ -17,11 +17,15 @@ PACKAGE_FILES = (
     Path("references/feature-parity-contract.md"),
     Path("references/feature-parity-inventory.json"),
     Path("references/source-grounding.md"),
+    Path("references/query-lifecycle-two-level-walkthrough.spec.md"),
+    Path("references/spec-compliance-manifest.json"),
     Path("scripts/Publish-Walkthrough.ps1"),
     Path("scripts/audit_html_features.py"),
+    Path("scripts/canonical_spec.py"),
     Path("scripts/model_contract.py"),
     Path("scripts/render_walkthrough.py"),
     Path("scripts/scaffold_model.py"),
+    Path("scripts/spec_compliance.py"),
 )
 
 

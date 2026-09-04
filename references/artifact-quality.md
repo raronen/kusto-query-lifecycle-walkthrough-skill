@@ -4,10 +4,11 @@ The generated page must be:
 
 - one self-contained UTF-8 HTML file with embedded CSS and JavaScript;
 - usable offline with no CDN, web font, iframe, remote script, or stylesheet dependency;
-- responsive from narrow mobile layouts through desktop;
-- keyboard navigable with visible focus, semantic landmarks, and accessible labels;
-- printable and readable with reduced motion;
-- titled and headed with the query-specific walkthrough title;
+- behaviorally identical to the normative responsive, keyboard, accessibility, and print
+  contract in `query-lifecycle-two-level-walkthrough.spec.md`, including documented `[C]`
+  defects and excluding only advisory CAVEAT remediations;
+- titled exactly `Kusto Query Lifecycle: Two-Level Interactive Walkthrough`, with the
+  query-specific walkthrough title retained in the page heading;
 - visibly labeled `EVIDENCE` or `ESTIMATED` near the top and in metadata;
 - organized as a ten-phase stage rail plus a substep/action rail;
 - complete against the semantic feature IDs and interaction invariants in
@@ -18,6 +19,10 @@ The generated page must be:
 - complete for the evidenced physical plan;
 - ordered so execution stack and heap zones appear before runtime components;
 - safe against model-provided HTML/script injection.
+
+The 93-item compliance audit is a hard rendering gate. Query-specific values intentionally
+parameterize the canonical example's query, plan, source paths, line ranges, and stale commit;
+all generated Azure DevOps links remain exact-line and pinned to the authorized workspace HEAD.
 
 Every claim/action/operator must link to exact Azure DevOps lines pinned to the current source
 workspace HEAD. The query must never appear in repository fixtures except as synthetic data.

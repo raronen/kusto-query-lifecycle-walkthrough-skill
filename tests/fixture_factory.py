@@ -25,6 +25,7 @@ def source_link(label: str, line: int = 10) -> dict[str, Any]:
             "lineEnd": line + 3,
             "lineStartColumn": 1,
             "lineEndColumn": 1,
+            "syntheticAnchor": label,
         }
     )
     return {
@@ -42,7 +43,12 @@ def _fill_links(value: Any, counter: list[int]) -> None:
         for key, child in value.items():
             if key == "source_links" and isinstance(child, list) and not child:
                 counter[0] += 1
-                value[key] = [source_link("Synthetic source evidence", 10 + counter[0] % 150)]
+                value[key] = [
+                    source_link(
+                        f"Synthetic source evidence {counter[0]}",
+                        10 + counter[0] % 150,
+                    )
+                ]
             else:
                 _fill_links(child, counter)
     elif isinstance(value, list):
@@ -122,147 +128,155 @@ def rich_model() -> dict[str, Any]:
             if outcome == "SCHEDULED_NO_OP"
             else ""
         )
-        substep = stage["substeps"][0]
-        substep["behavior"] = f"Query-specific {stage['title']} behavior."
-        substep["change_badge"] = outcome
-        substep["summary"] = f"Synthetic walkthrough for {stage['title']}."
-        substep["what_happens"] = f"The {stage['title']} owner processes the synthetic shape."
-        substep["why"] = "This state is required before the next lifecycle handoff."
-        substep["debug"] = "Break at the linked synthetic method and inspect the current node."
-        substep["next"] = "Advance to the next evidenced lifecycle owner."
-        substep["method_path"] = [f"Synthetic.{stage_id}.Enter", f"Synthetic.{stage_id}.Leave"]
-        substep["artifact"]["title"] = f"{stage['title']} synthetic artifact"
-        substep["artifact"]["before"] = f"{stage_id}: before"
-        substep["artifact"]["after"] = (
-            substep["artifact"]["before"]
-            if outcome == "SCHEDULED_NO_OP"
-            else f"{stage_id}: after"
-        )
-        runner = substep["runner"]
-        runner["title"] = f"Run the {stage['title'].lower()} {runner['type']} yourself"
-        runner["no_op"] = {
-            "enabled": outcome == "SCHEDULED_NO_OP",
-            "gates": ["Synthetic partition gate is absent."] if outcome == "SCHEDULED_NO_OP" else [],
-            "reasons": ["The tree remains unchanged."] if outcome == "SCHEDULED_NO_OP" else [],
-        }
-        runner["experiments"][0]["title"] = f"Compare {stage['title']} evidence gates"
-        runner["experiments"][0]["options"] = [
-            {"id": f"{stage_id}-baseline", "label": "Baseline evidence"},
-            {"id": f"{stage_id}-alternate", "label": "Alternate gate"},
-        ]
-        runner["experiments"][0]["results"] = [
-            {
-                "option_id": f"{stage_id}-baseline",
-                "result": f"Baseline {stage['title']} state is visible.",
-            },
-            {
-                "option_id": f"{stage_id}-alternate",
-                "result": f"Alternate {stage['title']} gate changes the visible explanation.",
-            },
-        ]
-        for action in runner["actions"]:
-            action["evidence_kind"] = outcome
-            action["what"] = f"Apply the synthetic {stage['title']} action."
-            action["why"] = "The linked evidence establishes this action."
-            action["result"] = "The synthetic state advances visibly."
-            action["stack_effect"] = "Compiler-only until execution; no concrete stack address claimed."
-            action["heap_effect"] = "Lifetime ownership is described conceptually without byte-size claims."
-            action["before"] = f"{stage_id}: runner before"
-            action["after"] = (
-                action["before"] if outcome == "SCHEDULED_NO_OP" else f"{stage_id}: runner after"
+        for substep in stage["substeps"]:
+            substep["behavior"] = f"Query-specific {stage['title']} behavior."
+            substep["change_badge"] = outcome
+            substep["summary"] = f"Synthetic walkthrough for {substep['title']}."
+            substep["what_happens"] = f"The {stage['title']} owner processes the synthetic shape."
+            substep["why"] = "This state is required before the next lifecycle handoff."
+            substep["debug"] = "Break at the linked synthetic method and inspect the current node."
+            substep["next"] = "Advance to the next evidenced lifecycle owner."
+            substep["method_path"] = [
+                {
+                    "name": f"Synthetic.{stage_id}.Enter",
+                    "source_links": [],
+                },
+                {
+                    "name": f"Synthetic.{stage_id}.Leave",
+                    "source_links": [],
+                },
+            ]
+            substep["artifact"]["title"] = f"{substep['title']} synthetic artifact"
+            substep["artifact"]["before"] = f"{substep['id']}: before"
+            substep["artifact"]["after"] = (
+                substep["artifact"]["before"]
+                if outcome == "SCHEDULED_NO_OP"
+                else f"{substep['id']}: after"
             )
+            if "runner" not in substep:
+                continue
+            runner = substep["runner"]
+            runner["title"] = f"Run the {substep['title'].lower()} {runner['type']} yourself"
+            runner["no_op"] = {
+                "enabled": outcome == "SCHEDULED_NO_OP",
+                "gates": ["Synthetic partition gate is absent."] if outcome == "SCHEDULED_NO_OP" else [],
+                "reasons": ["The tree remains unchanged."] if outcome == "SCHEDULED_NO_OP" else [],
+            }
+            runner["experiments"][0]["title"] = f"Compare {substep['title']} evidence gates"
+            for action in runner["actions"]:
+                action["evidence_kind"] = outcome
+                action["what"] = f"Apply the synthetic {stage['title']} action."
+                action["why"] = "The linked evidence establishes this action."
+                action["result"] = "The synthetic state advances visibly."
+                action["stack_effect"] = "Compiler-only until execution; no concrete stack address claimed."
+                action["heap_effect"] = "Lifetime ownership is described conceptually without byte-size claims."
+                action["before"] = f"{substep['id']}: runner before"
+                action["after"] = (
+                    action["before"] if outcome == "SCHEDULED_NO_OP" else f"{substep['id']}: runner after"
+                )
+                if runner["type"] == "pass":
+                    action["traversal"] = "Root to synthetic filter to source."
+                    action["predicate"] = "The synthetic filter shape matches the pass gate."
+                    action["applicability"] = "The supplied synthetic query contains that filter."
+                    action["optimization"] = "Reduces synthetic rows before projection."
+            if runner["type"] == "compiler":
+                for action in runner["compiler"]["before_actions"] + runner["compiler"]["after_actions"]:
+                    action["evidence_kind"] = "OBSERVED"
+                    action["what"] = "Inspect the synthetic compiler state."
+                    action["why"] = "The compiler action is present in the synthetic path."
+                    action["result"] = "The compiler representation is visible."
+                    action["stack_effect"] = "No runtime stack effect."
+                    action["heap_effect"] = "No runtime heap effect."
+                    action["before"] = "Synthetic compiler input."
+                    action["after"] = "Synthetic compiler output."
             if runner["type"] == "pass":
-                action["traversal"] = "Root to synthetic filter to source."
-                action["predicate"] = "The synthetic filter shape matches the pass gate."
-                action["applicability"] = "The supplied synthetic query contains that filter."
-                action["optimization"] = "Reduces synthetic rows before projection."
-        if runner["type"] == "compiler":
-            for action in runner["compiler"]["before_actions"] + runner["compiler"]["after_actions"]:
-                action["evidence_kind"] = "OBSERVED"
-                action["what"] = "Inspect the synthetic compiler state."
-                action["why"] = "The compiler action is present in the synthetic path."
-                action["result"] = "The compiler representation is visible."
-                action["stack_effect"] = "No runtime stack effect."
-                action["heap_effect"] = "No runtime heap effect."
-                action["before"] = "Synthetic compiler input."
-                action["after"] = "Synthetic compiler output."
-        if runner["type"] == "pass":
-            item = runner["pass"]["applicable_passes"][0]
-            item["title"] = f"Applicable {stage['title']} synthetic pass"
-            item["outcome"] = outcome
-            item["before"] = f"{stage_id}: cumulative before"
-            item["after"] = item["before"] if outcome == "SCHEDULED_NO_OP" else f"{stage_id}: cumulative after"
-            runner["pass"]["cumulative_before"] = item["before"]
-            runner["pass"]["cumulative_after"] = item["after"]
+                for item_index, item in enumerate(runner["pass"]["applicable_passes"]):
+                    item_outcome = (
+                        "SCHEDULED_NO_OP"
+                        if substep["id"] == "4-0" and item_index >= 5
+                        else outcome
+                    )
+                    item["title"] = f"Applicable {stage['title']} synthetic pass"
+                    item["outcome"] = item_outcome
+                    item["before"] = f"{substep['id']}: cumulative before"
+                    item["after"] = (
+                        item["before"]
+                        if item_outcome == "SCHEDULED_NO_OP"
+                        else f"{substep['id']}: cumulative after"
+                    )
+                runner["pass"]["cumulative_before"] = f"{substep['id']}: cumulative before"
+                runner["pass"]["cumulative_after"] = (
+                    runner["pass"]["cumulative_before"]
+                    if outcome == "SCHEDULED_NO_OP"
+                    else f"{substep['id']}: cumulative after"
+                )
 
-    physical = stages[7]["substeps"][0]["runner"]["physical"]
     child = _operator("op-source", "node-source", "Synthetic source", [])
     root = _operator("op-filter", "node-filter", "Synthetic filter", [child])
-    physical["full_plan"] = {"complete": True, "operator_count": 2, "roots": [root]}
-    physical["logical_to_physical"] = [
-        {
-            "logical_id": "logical-op-filter",
-            "physical_operator_ids": ["op-filter"],
-            "reason": "The synthetic logical filter maps to the physical filter.",
-            "source_links": [],
-        },
-        {
-            "logical_id": "logical-op-source",
-            "physical_operator_ids": ["op-source"],
-            "reason": "The synthetic logical source maps to the physical source.",
-            "source_links": [],
-        },
-    ]
-
-    execute = stages[9]["substeps"][0]["runner"]["execute"]
-    execute["components"][0]["evidence_ref"] = "op-filter"
-    execute["components"][0]["state"] = "active"
-    execute["components"][0]["ownership"] = "The synthetic coordinator owns the current batch."
-    execute["components"][0]["breakpoint"] = "Before the synthetic predicate callback."
-    execute["action_timeline"][0].update(
-        {
-            "title": "Pull the next synthetic batch",
-            "what": "The coordinator requests the next batch.",
-            "why": "The pull model drives the evidenced operators.",
-            "stack_effect": "Adds the conceptual operator frame at the top.",
-            "heap_effect": "Keeps the query-lifetime state live.",
-        }
-    )
-    execute["language_lanes"][0].update(
-        {
-            "role": "Coordinates the synthetic pull.",
-            "applicability": "The supplied synthetic plan uses this managed coordinator.",
-        }
-    )
-    execute["call_stack"][0].update(
-        {
-            "frame": "SyntheticCoordinator.Pull",
-            "what": "Requests the next batch.",
-            "why": "This is the top conceptual frame for the event.",
-        }
-    )
-    execute["heap_zones"][0].update(
-        {
-            "what": "Synthetic query-lifetime token.",
-            "why": "The request remains active during the pull.",
-            "owner": "SyntheticCoordinator",
-        }
-    )
-    for scenario in execute["scenarios"]:
-        scenario.update(
+    for substep in stages[7]["substeps"][:4]:
+        physical = substep["runner"]["physical"]
+        physical["full_plan"] = {"complete": True, "operator_count": 2, "roots": [root]}
+        physical["logical_to_physical"] = [
             {
-                "trigger": f"Synthetic {scenario['type']} trigger.",
-                "behavior": f"The runtime handles the synthetic {scenario['type']} path.",
-                "ownership_effect": "Ownership is released or retained according to the linked path.",
+                "logical_id": "logical-op-filter",
+                "physical_operator_ids": ["op-filter"],
+                "reason": "The synthetic logical filter maps to the physical filter.",
+                "source_links": [],
+            },
+            {
+                "logical_id": "logical-op-source",
+                "physical_operator_ids": ["op-source"],
+                "reason": "The synthetic logical source maps to the physical source.",
+                "source_links": [],
+            },
+        ]
+
+    for substep in stages[9]["substeps"]:
+        execute = substep["runner"]["execute"]
+        execute["components"][0]["evidence_ref"] = "op-filter"
+        execute["components"][0]["state"] = "active"
+        execute["components"][0]["ownership"] = "The synthetic coordinator owns the current batch."
+        execute["components"][0]["breakpoint"] = "Before the synthetic predicate callback."
+        for event in execute["action_timeline"]:
+            event.update(
+                {
+                    "title": "Pull the next synthetic batch",
+                    "what": "The coordinator requests the next batch.",
+                    "why": "The pull model drives the evidenced operators.",
+                    "stack_effect": "Adds the conceptual operator frame at the top.",
+                    "heap_effect": "Keeps the query-lifetime state live.",
+                }
+            )
+        execute["language_lanes"][0].update(
+            {
+                "role": "Coordinates the synthetic pull.",
+                "applicability": "The supplied synthetic plan uses this managed coordinator.",
             }
         )
+        execute["call_stack"][0].update(
+            {
+                "frame": "SyntheticCoordinator.Pull",
+                "what": "Requests the next batch.",
+                "why": "This is the top conceptual frame for the event.",
+            }
+        )
+        execute["heap_zones"][0].update(
+            {
+                "what": "Synthetic query-lifetime token.",
+                "why": "The request remains active during the pull.",
+                "owner": "SyntheticCoordinator",
+            }
+        )
+        for scenario in execute["scenarios"]:
+            scenario.update(
+                {
+                    "trigger": f"Synthetic {scenario['type']} trigger.",
+                    "behavior": f"The runtime handles the synthetic {scenario['type']} path.",
+                    "ownership_effect": "Ownership is released or retained according to the linked path.",
+                }
+            )
 
     _set_evidence(stages, "OBSERVED")
-    for stage in stages:
-        if stage["id"] == "partial-queries":
-            stage["evidence_kind"] = "SCHEDULED_NO_OP"
-            stage["substeps"][0]["change_badge"] = "SCHEDULED_NO_OP"
-            stage["substeps"][0]["runner"]["actions"][0]["evidence_kind"] = "SCHEDULED_NO_OP"
     _fill_links(stages, [0])
     return {
         "schema_version": "2.0",

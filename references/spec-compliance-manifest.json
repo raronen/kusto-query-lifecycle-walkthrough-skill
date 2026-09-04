@@ -1,0 +1,2103 @@
+{
+  "schema_version": "1.0",
+  "spec_path": "references/query-lifecycle-two-level-walkthrough.spec.md",
+  "spec_sha256": "63b9cf2ad7f8c8e0169e6300f6c82df4e5e2957472de6f4d54492833c7a73206",
+  "acceptance_item_count": 93,
+  "automated_count": 93,
+  "manual_count": 0,
+  "parameterizations": [
+    {
+      "item_id": "AC-A2326BC5E437D8D5",
+      "reason": "The reusable skill must pin Azure DevOps links to the authorized local workspace current HEAD, not the canonical example commit.",
+      "verification": "validate_complete_model and audit_source_links verify the dynamic commit."
+    },
+    {
+      "item_id": "AC-D56D410B5B6FF37C",
+      "reason": "The 45 precise link targets remain position-distinct but their paths and lines are query-specific.",
+      "verification": "audit_source_links verifies one distinct current-HEAD link per canonical substep."
+    },
+    {
+      "item_id": "AC-E1C807335EEB0B74",
+      "reason": "S4.4 retains the canonical duplicate method-path behavior while its exact line is resolved from current source.",
+      "verification": "audit_source_links verifies a current-HEAD S4.4 source link."
+    },
+    {
+      "item_id": "AC-6FFCBFC759F3545E",
+      "reason": "The five-of-22 transformation result is canonical example data; reusable runs preserve the 22-position lab but derive transformation versus scheduled-no-op outcomes from query evidence.",
+      "verification": "validate_complete_model verifies every pass outcome and its before/after evidence; the rich fixture reproduces the canonical five-of-22 state."
+    },
+    {
+      "item_id": "AC-2670B83728DD0691",
+      "reason": "The six-node explorer and its interaction contract are fixed, while NodeIds, node labels, fields, and byte ranges are query-specific evidence rather than copied canonical plan data.",
+      "verification": "audit_runner_engines and browser smoke verify the six-node/three-view explorer; model validation verifies byte ranges."
+    },
+    {
+      "item_id": "AC-8401760312A9A392",
+      "reason": "The four canonical heap zones and selected-event fold are fixed; heap object ids, labels, and details are query-specific.",
+      "verification": "audit_runner_engines and browser smoke verify zone order, folding, and status transitions."
+    }
+  ],
+  "items": [
+    {
+      "id": "AC-F30000B6EAC0614E",
+      "section": "20.1",
+      "heading": "File and bootstrap",
+      "start_line": 2602,
+      "end_line": 2602,
+      "wording": "Single self-contained HTML file; no external subresource of any kind is requested on load.",
+      "normalized_sha256": "f30000b6eac0614ecf6b09f18b1473ad6169aecf07e64ce641bb37dc3334c226",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "scripts/render_walkthrough.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f30000b6eac0614e",
+        "kind": "browser",
+        "auditor": "audit_file_bootstrap",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C11F432E3549BF70",
+      "section": "20.1",
+      "heading": "File and bootstrap",
+      "start_line": 2603,
+      "end_line": 2603,
+      "wording": "`<title>` is `Kusto Query Lifecycle: Two-Level Interactive Walkthrough`; `<html lang=\"en\">`.",
+      "normalized_sha256": "c11f432e3549bf70e0d45df257ad5173f099142b64acf0c0a2481ed11b40620c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "scripts/render_walkthrough.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c11f432e3549bf70",
+        "kind": "browser",
+        "auditor": "audit_file_bootstrap",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-923FE874C4378A31",
+      "section": "20.1",
+      "heading": "File and bootstrap",
+      "start_line": 2604,
+      "end_line": 2604,
+      "wording": "The script runs under `\"use strict\"` and requires no `DOMContentLoaded` guard.",
+      "normalized_sha256": "923fe874c4378a31611d36c2260ba19bf2a64c40b676c024b85a9011591f46df",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "scripts/render_walkthrough.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-923fe874c4378a31",
+        "kind": "browser",
+        "auditor": "audit_file_bootstrap",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-5B8800BDB05F647B",
+      "section": "20.1",
+      "heading": "File and bootstrap",
+      "start_line": 2605,
+      "end_line": 2605,
+      "wording": "Bootstrap executes exactly `initializePassTable(); render();`.",
+      "normalized_sha256": "5b8800bdb05f647b3e9c968fe8bd326494ded2ddffe80152c42f71d1013140b7",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "scripts/render_walkthrough.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-5b8800bdb05f647b",
+        "kind": "browser",
+        "auditor": "audit_file_bootstrap",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C5246B213F96781B",
+      "section": "20.1",
+      "heading": "File and bootstrap",
+      "start_line": 2606,
+      "end_line": 2607,
+      "wording": "After bootstrap, `.pass-lab` is a direct child of `.center` positioned immediately before `.step-detail`. **[C]** — it is authored inside `#optimization-additional-context`.",
+      "normalized_sha256": "c5246b213f96781ba118c9dc2c46c4f2c8be0f72068609dcc873ae7a795e17a6",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "scripts/render_walkthrough.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c5246b213f96781b",
+        "kind": "browser",
+        "auditor": "audit_file_bootstrap",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-77F6C07C460E155D",
+      "section": "20.1",
+      "heading": "File and bootstrap",
+      "start_line": 2608,
+      "end_line": 2609,
+      "wording": "Each of the 22 optimization table rows has class `pass-row`, `data-pass-index`, a 4th cell, and a click handler that ignores clicks landing inside an `<a>`.",
+      "normalized_sha256": "77f6c07c460e155d8db2435e803f81d8d1f775e0ac4ded40185e0dd2d34b39ed",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "scripts/render_walkthrough.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-77f6c07c460e155d",
+        "kind": "browser",
+        "auditor": "audit_file_bootstrap",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-497E602B24EB024F",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2613,
+      "end_line": 2614,
+      "wording": "Exactly 10 stage buttons, in the order Syntax, Semantic, Relop, Preparation, Initial optimize, Partial queries, Final optimize, Physical plan, Serialize, Execute.",
+      "normalized_sha256": "497e602b24eb024f3dca36ab91c40129e6678eca3839fb3027da11f95ce83775",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-497e602b24eb024f",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-2890239D328977E7",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2615,
+      "end_line": 2615,
+      "wording": "`#journey-progress` reads `Stage N of 10`.",
+      "normalized_sha256": "2890239d328977e79e0fd0982207bc6ae48191407cb1d82046cb61c8996cd766",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-2890239d328977e7",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-0644FF87D533E710",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2616,
+      "end_line": 2617,
+      "wording": "The selected stage shows amber border and inverted number badge; visited-not-selected stages show a green `✓`.",
+      "normalized_sha256": "0644ff87d533e710e632df0ee8d32d1d8dd54f9af47ed1b32c643856818f70fe",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-0644ff87d533e710",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-5F9664AECED84D7B",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2618,
+      "end_line": 2618,
+      "wording": "Stage 1 shows a `✓` on first load without any interaction. **[C]**",
+      "normalized_sha256": "5f9664aeced84d7b3b9edfbaebac9f0639520f885427386c186093d76745a9bf",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-5f9664aeced84d7b",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-929D28D0BF91E893",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2619,
+      "end_line": 2619,
+      "wording": "`#previous-stage` is disabled at stage 1; `#next-stage` at stage 10.",
+      "normalized_sha256": "929d28d0bf91e89328b60af2c975bab3f29b803efe0a89ddd11a6f2d18f8c121",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-929d28d0bf91e893",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-9EBA146F36B1EF9A",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2620,
+      "end_line": 2621,
+      "wording": "Selecting a stage resets `stepIndex` to 0, resets all lab state, stops both timers, and sets `traversalIndex = focuses[0]`.",
+      "normalized_sha256": "9eba146f36b1ef9ace6a6e40d03d90ecd85664644c8243d628765a0b32a6aeb1",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-9eba146f36b1ef9a",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-5ADECFFEC1AAD34A",
+      "section": "20.2",
+      "heading": "Stage level",
+      "start_line": 2622,
+      "end_line": 2622,
+      "wording": "Selecting a stage does **not** preserve scroll position. **[C]**",
+      "normalized_sha256": "5adecffec1aad34a2a2d5af81f6d3a354f5172174469d50f637a7ce7edee1376",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-5adecffec1aad34a",
+        "kind": "browser",
+        "auditor": "audit_stage_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-797E6A17A21CAECE",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2626,
+      "end_line": 2626,
+      "wording": "Substep counts per stage are exactly 4, 5, 4, 4, 5, 4, 5, 5, 3, 6 (45 total).",
+      "normalized_sha256": "797e6a17a21caece5b7ba5b97f289f978da41e0434f5df69afc5b014b8c7cae2",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-797e6a17a21caece",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-5D7884F2C5423972",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2627,
+      "end_line": 2628,
+      "wording": "Each substep chip shows `Substep N`, the title, a cyan walk badge, an amber change badge, and a runner badge chosen by the precedence pass → physical → compiler → boundary → execution.",
+      "normalized_sha256": "5d7884f2c54239721cc563862c00df76df1c71948dc935622526fa6165310f7e",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-5d7884f2c5423972",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-09C7B9D0050F9B02",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2629,
+      "end_line": 2630,
+      "wording": "The four runner-less substeps (S4.1, S4.4, S6.1, S6.2) show **no** runner badge and render **no** lab section and **no** placeholder.",
+      "normalized_sha256": "09c7b9d0050f9b0270b2534a10a5fce33c8e679f4bdc1076363f826b06bceda1",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-09c7b9d0050f9b02",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-1F305F1F4DD9471F",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2631,
+      "end_line": 2631,
+      "wording": "Each substep chip carries a source-link anchor labelled `{file}:{line}–{end} ↗`.",
+      "normalized_sha256": "1f305f1f4dd9471f815083a19c7bed4b38cef924ad5cd6a725c9520328576d00",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-1f305f1f4dd9471f",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C480033BD25A6144",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2632,
+      "end_line": 2632,
+      "wording": "`#step-slider` `max` equals `steps.length - 1` and tracks `stepIndex` bidirectionally.",
+      "normalized_sha256": "c480033bd25a61445f037edfe53a8266fd184ddc1c4a5da375b18eb6bc1e3776",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c480033bd25a6144",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-892C612CDB4AA92F",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2633,
+      "end_line": 2634,
+      "wording": "Selecting a substep preserves scroll position across the layout change (synchronous restore plus one `requestAnimationFrame` restore).",
+      "normalized_sha256": "892c612cdb4aa92f7d480d557ccc721e1d67a6a2be6d4b4579ee14b3b8e21540",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-892c612cdb4aa92f",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-67E5F3680C0C45DD",
+      "section": "20.3",
+      "heading": "Substep level",
+      "start_line": 2635,
+      "end_line": 2635,
+      "wording": "`#step-summary` and `#step-action` display the identical string. **[C]**",
+      "normalized_sha256": "67e5f3680c0c45ddea691c86e4ce9726e31fa06bdb4d1c3b2d41989d29fe8647",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "references/evidence-model.schema.json"
+      ],
+      "verification": {
+        "assertion": "verify-ac-67e5f3680c0c45dd",
+        "kind": "browser",
+        "auditor": "audit_substep_level",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-71E9DF4514BEE064",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2639,
+      "end_line": 2639,
+      "wording": "At most one lab is visible at any time, at all 45 substeps.",
+      "normalized_sha256": "71e9df4514bee064c6d4bfde08b020c9af1cf6c25bda28b7dceec1db50b88b55",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-71e9df4514bee064",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-EFEEC727D61D47F3",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2640,
+      "end_line": 2641,
+      "wording": "Compiler lab is visible at exactly the 13 keys `0-0…0-3`, `1-0…1-4`, `2-0…2-3` and carries the correct `kind` class (`syntax` / `semantic` / `relop`) with the matching accent colour.",
+      "normalized_sha256": "efeec727d61d47f389a8b848fe291403b23758ef1b6a15bc5ecd7aebc9fa3e99",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-efeec727d61d47f3",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-1439C9AC7A73A407",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2642,
+      "end_line": 2642,
+      "wording": "Compiler before/after panel headings vary by `kind` per the table in §6.1.3.",
+      "normalized_sha256": "1439c9ac7a73a407ea9283823c7f7c5b1fb3b9a8bf264c7a1d4c89cdabad9185",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-1439c9ac7a73a407",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-D1C9B5637A5785B1",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2643,
+      "end_line": 2643,
+      "wording": "The compiler mapping grid renders only at S3.2 and only when the `map` option is selected.",
+      "normalized_sha256": "d1c9b5637a5785b10bc0cd95aacb2db66bd3eeb2a4fc54e095c8cd4a10abda61",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-d1c9b5637a5785b1",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-83889EE87D64B842",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2644,
+      "end_line": 2645,
+      "wording": "Pass lab is visible at exactly the 15 keys listed in §6.2.3, with pass counts 4, 3, 22, 1, 1, 3, 3, 29, 6, 23, 3, 1, 11, 15, 17.",
+      "normalized_sha256": "83889ee87d64b842675e4da3147b336ec415c279b68f01d27c8b31ecf64bd823",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-83889ee87d64b842",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6FFCBFC759F3545E",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2646,
+      "end_line": 2646,
+      "wording": "At S5.1 exactly 5 of the 22 passes are marked `CHANGES THIS TREE`.",
+      "normalized_sha256": "6ffcbfc759f3545e8ddc75564249f9c6a73b0d8557041a642de10931f89fc0d1",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6ffcbfc759f3545e",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-F4375CAF6773D852",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2647,
+      "end_line": 2648,
+      "wording": "The static second `<p>` of `.pass-lab-head` is never replaced and appears under all 15 pass labs. **[C]**",
+      "normalized_sha256": "f4375caf6773d8521a2c3f9af315b4ab4dfeadae50b9a41d1301ef2bf8265ae0",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f4375caf6773d852",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-BB0AF141D0F8C351",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2649,
+      "end_line": 2649,
+      "wording": "`details#physical-plan-deep-dive` is visible at S8.5 and nowhere else.",
+      "normalized_sha256": "bb0af141d0f8c35113c6c711d2469b70ca8764fa67095f69dc7dbb6e2ed1cee7",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-bb0af141d0f8c351",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-58D8DAE678408055",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2650,
+      "end_line": 2651,
+      "wording": "At S5.1, and only there, the 22-row table is two-way bound: clicking a row selects the pass, the selected row is tinted, and every row's 4th cell shows a `CHANGES` / `NO CHANGE` badge.",
+      "normalized_sha256": "58d8dae678408055f435a5f05ec3169ad68ced6c5a0a8d08bc93d66f8fc9ddeb",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-58d8dae678408055",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6F39C18C08DCC8AF",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2652,
+      "end_line": 2652,
+      "wording": "Physical lab is visible at exactly `7-0…7-3` with 5, 8, 7, 7 actions and the four mode pills.",
+      "normalized_sha256": "6f39c18c08dcc8af949103ca85fdd13e6c922ce2520890f26bbe0bd9521cdbdb",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6f39c18c08dcc8af",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6E9B26D7C6C8882C",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2653,
+      "end_line": 2653,
+      "wording": "Physical and boundary lab headings are overwritten with `Run “{substep title}” yourself`.",
+      "normalized_sha256": "6e9b26d7c6c8882c7ea1558fc6b90cb5a0399d96ad0ab0b0d863823e7139a67c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6e9b26d7c6c8882c",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-0D5CEB8B5B613E9F",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2654,
+      "end_line": 2656,
+      "wording": "Boundary lab is visible at exactly `8-0`, `8-1`, `8-2` with 6, 5, 7 actions, and its body is dispatched by `stepIndex` (0 → plan explorer, 1 → context experiment, 2 → handoff simulator). **[C]**",
+      "normalized_sha256": "0d5ceb8b5b613e9f9cbb7af0c07b510d38d4520ef45dc19c758d69cad6994f23",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-0d5ceb8b5b613e9f",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-2670B83728DD0691",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2657,
+      "end_line": 2659,
+      "wording": "The boundary plan explorer offers 6 nodes with NodeIds 0, 1, 2, 3, 4, **6** and three views (`C# object`, `JSON`, `UTF-8 bytes`); the hex view wraps at 16 bytes and truncates at 192. **[C]** — the NodeId gap is intentional.",
+      "normalized_sha256": "2670b83728dd0691b3ffde11821f3ec0d11968c371393fbe63f19e80e52204ae",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-2670b83728dd0691",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C4AC5EF25BE35B17",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2660,
+      "end_line": 2660,
+      "wording": "The boundary quiz accepts `Plan` / `Context` / `Both` and marks only `Context` correct.",
+      "normalized_sha256": "c4ac5ef25be35b17b9fb4274b83967de9307eebd7c38e089f107083162f748f2",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c4ac5ef25be35b17",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-2E319E1EA69A8AAC",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2661,
+      "end_line": 2662,
+      "wording": "The boundary context experiment recomputes only the context buffer size; the plan buffer size is constant and `PLAN REBUILT?` always reads `No`.",
+      "normalized_sha256": "2e319e1ea69a8aace911fca436b3e16aa3c00bd8e0ecb186acd1436cb328c00c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-2e319e1ea69a8aac",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-CA1A7D0F61078770",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2663,
+      "end_line": 2664,
+      "wording": "Execution lab is visible at exactly `9-0…9-5` with 7, 7, 7, 8, 8, 7 events and 3, 3, 3, 4, 4, 4 scenarios.",
+      "normalized_sha256": "ca1a7d0f6107877029273124b76ca6629593af358e4e23352650084fe6a1efa3",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-ca1a7d0f61078770",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-8401760312A9A392",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2665,
+      "end_line": 2666,
+      "wording": "Execution heap folds `add` / `update` / `release` events over four zones in the fixed order managed, borrowed, cpp, rust, with `live` / `mutated` / `released` styling.",
+      "normalized_sha256": "8401760312a9a392b26d3be736b81b86e8cac226b2a4c5f81d04c1a97859d09f",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-8401760312a9a392",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-F1A627525C6F9AE3",
+      "section": "20.4",
+      "heading": "Runner engines",
+      "start_line": 2667,
+      "end_line": 2667,
+      "wording": "The execution heap reflects the **selected** event index, not the executed one. **[C]**",
+      "normalized_sha256": "f1a627525c6f9ae37f8d81a45d70ef3c9badd830a142a569233708d4ca5b6042",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f1a627525c6f9ae3",
+        "kind": "browser",
+        "auditor": "audit_runner_engines",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-1C126FC6776C3D8B",
+      "section": "20.5",
+      "heading": "Gating",
+      "start_line": 2671,
+      "end_line": 2672,
+      "wording": "Pass, compiler, and physical Apply buttons are enabled only when the selected index equals `applied + 1`; labels cycle `Applied ✓` / `Apply … {n}` / `Apply … {k} first`.",
+      "normalized_sha256": "1c126fc6776c3d8bb4186d92c4f5c0baa4bc3d02e7e1c77e9efd62dcf1cda514",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-1c126fc6776c3d8b",
+        "kind": "browser",
+        "auditor": "audit_gating",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-09BD5FB8FB08208F",
+      "section": "20.5",
+      "heading": "Gating",
+      "start_line": 2673,
+      "end_line": 2673,
+      "wording": "The execution Execute button is **never** disabled and applies via `Math.max`. **[C]**",
+      "normalized_sha256": "09bd5fb8fb08208f83cebeb95c7e8b636e244835da8ee145cb96160756dfb073",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-09bd5fb8fb08208f",
+        "kind": "browser",
+        "auditor": "audit_gating",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-F0F49B01F3FC2252",
+      "section": "20.5",
+      "heading": "Gating",
+      "start_line": 2674,
+      "end_line": 2675,
+      "wording": "Applying never changes any displayed tree, state pane, or heap contents — only chip classes, badges, counters, and button labels. **[C]**",
+      "normalized_sha256": "f0f49b01f3fc2252fae9ce7e6fb0f18602072678158c0f4f51c52322971a6518",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f0f49b01f3fc2252",
+        "kind": "browser",
+        "auditor": "audit_gating",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-F4309956BF60AA60",
+      "section": "20.5",
+      "heading": "Gating",
+      "start_line": 2676,
+      "end_line": 2676,
+      "wording": "Every rail's prev/next buttons are disabled at their respective bounds.",
+      "normalized_sha256": "f4309956bf60aa608e4cf2b2069aeb4ec7e2a93fcc2b7a01c31abe770798991c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f4309956bf60aa60",
+        "kind": "browser",
+        "auditor": "audit_gating",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C1BAF696DD58DCF4",
+      "section": "20.5",
+      "heading": "Gating",
+      "start_line": 2677,
+      "end_line": 2677,
+      "wording": "Every index is clamped into range on render, so no out-of-range state can produce an exception.",
+      "normalized_sha256": "c1baf696dd58dcf48609879b80ffb048f1b6d6a0201409061b5cd9c5ce5207b4",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c1baf696dd58dcf4",
+        "kind": "browser",
+        "auditor": "audit_gating",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-0D0F8E308786BEF9",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2681,
+      "end_line": 2682,
+      "wording": "The traversal mode pill, summary, movement, and unwind text come from `traversalCatalog[stageIndex]`.",
+      "normalized_sha256": "0d0f8e308786bef981799555a56b2cfcad177c65e9b22cbccbb970269a2d5150",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-0d0f8e308786bef9",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C82BA8DDB9D6258C",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2683,
+      "end_line": 2684,
+      "wording": "Four shared trees are used: `languageTree` (stages 1–3), `relopTree` (4–8), `physicalTree` (9), `executionTree` (10).",
+      "normalized_sha256": "c82ba8ddb9d6258c7324fac3510dd41ad8cd2c4fbbb2aa737a8201abacbabc11",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c82ba8ddb9d6258c",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-D2F47ED3C7777C87",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2685,
+      "end_line": 2685,
+      "wording": "Every id in every `order` exists in its tree, and every tree node appears in its `order`.",
+      "normalized_sha256": "d2f47ed3c7777c87f6af2d01bb509182e12bfbbc060a61c808a667014a7fbd9b",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-d2f47ed3c7777c87",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-198B6EB080F276F8",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2686,
+      "end_line": 2687,
+      "wording": "Node classes resolve as `current` / `returning` / `visited` per the occurrence arithmetic in §5.8.",
+      "normalized_sha256": "198b6eb080f276f82e120c66f8f1e7a3e85db9b19ae84a0073bb813d05322480",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-198b6eb080f276f8",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-D16AC518F2C3B809",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2688,
+      "end_line": 2688,
+      "wording": "`data-order` shows the first occurrence ordinal, replaced by `✓` once visited. **[C]**",
+      "normalized_sha256": "d16ac518f2c3b8090205118980b4cae9121e3d4f7c81c2899ac5846ff18e499d",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-d16ac518f2c3b809",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-39D475472A38EFBA",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2689,
+      "end_line": 2689,
+      "wording": "Clicking a node seeks to the next occurrence at or after the current index, else the first.",
+      "normalized_sha256": "39d475472a38efba764cb33c67afadaaea08939c2327d287eedf47ac0eb1d0b3",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-39d475472a38efba",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-9CDCF073CAB8E0E2",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2690,
+      "end_line": 2690,
+      "wording": "Play advances at 850 ms, stops at the end, and rewinds to 0 if pressed at the end.",
+      "normalized_sha256": "9cdcf073cab8e0e284c84ba53a86748b671d791d1221b8746bcf846f6a802f4a",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-9cdcf073cab8e0e2",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-F449D1769FAD4C99",
+      "section": "20.6",
+      "heading": "Traversal",
+      "start_line": 2691,
+      "end_line": 2691,
+      "wording": "Entering S2.5 clamps `traversalIndex` from the out-of-range `focuses[4] = 18` to 17. **[C]**",
+      "normalized_sha256": "f449d1769fad4c999c59f80f62334c55218a12e06f8a03fdaac334b1317c10eb",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f449d1769fad4c99",
+        "kind": "browser",
+        "auditor": "audit_traversal",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-3776EB6D4015BBB8",
+      "section": "20.7",
+      "heading": "Network beacon",
+      "start_line": 2695,
+      "end_line": 2695,
+      "wording": "The beacon is `position: fixed` bottom-right with `z-index: 100`.",
+      "normalized_sha256": "3776eb6d4015bbb8d53740b4ca8fca4142ac39cab4e304238e7d7d78be884997",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-3776eb6d4015bbb8",
+        "kind": "browser-geometry",
+        "auditor": "audit_network_beacon",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-FCF8E52AD19DC060",
+      "section": "20.7",
+      "heading": "Network beacon",
+      "start_line": 2696,
+      "end_line": 2696,
+      "wording": "State resolves field-by-field: override `??` stage default.",
+      "normalized_sha256": "fcf8e52ad19dc060a2bbb439f34f12acf66592369a04f0e4555ce52aa3aea447",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-fcf8e52ad19dc060",
+        "kind": "browser-geometry",
+        "auditor": "audit_network_beacon",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-00EB0238AF1F4374",
+      "section": "20.7",
+      "heading": "Network beacon",
+      "start_line": 2697,
+      "end_line": 2697,
+      "wording": "Exactly 8 overrides exist, at `1-0`, `1-2`, `5-2`, `7-3`, `8-2`, `9-3`, `9-4`, `9-5`.",
+      "normalized_sha256": "00eb0238af1f437459581c8729b865a8487fa6bc59a0cd804118678590a6d3e0",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-00eb0238af1f4374",
+        "kind": "browser-geometry",
+        "auditor": "audit_network_beacon",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-73DEFE73C3424261",
+      "section": "20.7",
+      "heading": "Network beacon",
+      "start_line": 2698,
+      "end_line": 2698,
+      "wording": "The `active` (pulsing red) state occurs at exactly one substep: **S10.5**.",
+      "normalized_sha256": "73defe73c342426166e53db9e2fa0641efb9b0d74b4878fe498cd075cad81e7b",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-73defe73c3424261",
+        "kind": "browser-geometry",
+        "auditor": "audit_network_beacon",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-25D439DF9BBB9EF2",
+      "section": "20.7",
+      "heading": "Network beacon",
+      "start_line": 2699,
+      "end_line": 2699,
+      "wording": "The `imminent` (pink) state occurs at exactly one substep: **S10.4**.",
+      "normalized_sha256": "25d439df9bbb9ef23ebc40c4319cb9f0b8c5a8b4e6a3995f145a125067838187",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-25d439df9bbb9ef2",
+        "kind": "browser-geometry",
+        "auditor": "audit_network_beacon",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-A2326BC5E437D8D5",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2703,
+      "end_line": 2704,
+      "wording": "All links target `msazure.visualstudio.com/One/_git/Azure-Kusto-Service` pinned to `version=GCe6fd1fd059015c2db443ae044b72f3dfba2d3cf3`.",
+      "normalized_sha256": "a2326bc5e437d8d5048020783b29c50eeca0ff929b1f3f81c3b429ddc4ff6e02",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-a2326bc5e437d8d5",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-96330251654803E4",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2705,
+      "end_line": 2706,
+      "wording": "Labels render as `{file}:{line}–{end} ↗` with an en dash, collapsing to `{file}:{line} ↗` when start equals end.",
+      "normalized_sha256": "96330251654803e47bfe9e2eeedd5a502b38660cacc69b0342e97fcd32fd4e95",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-96330251654803e4",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-D56D410B5B6FF37C",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2707,
+      "end_line": 2707,
+      "wording": "All 45 `preciseLinks` entries are distinct.",
+      "normalized_sha256": "d56d410b5b6ff37c1852b0f98e1db088e63b3f6b9d972e8ae48e886b13b68bc3",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-d56d410b5b6ff37c",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6FC985A34F0A5106",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2708,
+      "end_line": 2709,
+      "wording": "Every call-path method resolves in `methodTargets`; every traversal node id resolves in `treeNodeReferences`.",
+      "normalized_sha256": "6fc985a34f0a5106bd0a9fb4ca2148d123be8937a49e5b8a8c5bb4ca09c1d4ce",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6fc985a34f0a5106",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-E1C807335EEB0B74",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2710,
+      "end_line": 2710,
+      "wording": "`S4.4`'s `PassManager.Execute` link resolves to `Common/PassManager.cs:58–88`. **[C]**",
+      "normalized_sha256": "e1c807335eeb0b74e1f0552d1cc68eea85c067a3cf557dd4fa19b9d0744a927b",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-e1c807335eeb0b74",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-3E10E1BCBA793D13",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2711,
+      "end_line": 2712,
+      "wording": "Tree linkification uses a longest-key-first alternation with `(?<![A-Za-z0-9_])` / `(?![A-Za-z0-9_])` boundaries.",
+      "normalized_sha256": "3e10e1bcba793d13275e09a23715a58ff607a1b8ecabda02f5deca63632cf4a3",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-3e10e1bcba793d13",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-ACB8976D6522B645",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2713,
+      "end_line": 2714,
+      "wording": "Prose linkification skips text inside `a`, `button`, `code`, `pre`, `script`, `style`, and is idempotent across repeated renders.",
+      "normalized_sha256": "acb8976d6522b6454367489937b4946c9603f2a9e6a62e46435a73cea2d280e0",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-acb8976d6522b645",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-CB6003BE668B42F7",
+      "section": "20.8",
+      "heading": "Source links",
+      "start_line": 2715,
+      "end_line": 2716,
+      "wording": "All outbound anchors use `target=\"_blank\"`; 7 boundary-lab anchors use `rel=\"noreferrer\"` while the rest use `rel=\"noopener noreferrer\"`. **[C]**",
+      "normalized_sha256": "cb6003be668b42f74d6d87c7adbe116bcc8c384c7ed9b8dfcb51bd6795f59ace",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-cb6003be668b42f7",
+        "kind": "browser",
+        "auditor": "audit_source_links",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-E77F67230F0DAB4D",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2720,
+      "end_line": 2721,
+      "wording": "`ArrowLeft` / `ArrowRight` move substeps; `ArrowUp` / `ArrowDown` move stages with `preventDefault`.",
+      "normalized_sha256": "e77f67230f0dab4d20217302d539b59084f67b9d7e01f0f07ecdfec0b256ac04",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-e77f67230f0dab4d",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-67344B58084D8705",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2722,
+      "end_line": 2723,
+      "wording": "The handler returns early when `event.target` matches `input, button`, which disables arrow navigation once any control holds focus. **[C]**",
+      "normalized_sha256": "67344b58084d870583f573c97d029dd74e92ffad4b8fd2cfb569c97adeec31ff",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-67344b58084d8705",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-5B1A9B60ACB441FB",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2724,
+      "end_line": 2724,
+      "wording": "`:focus-visible` renders a 3px amber outline with 2px offset.",
+      "normalized_sha256": "5b1a9b60acb441fb5d7f5f36ff4c1632052b2b4316140c170434205da450e995",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-5b1a9b60acb441fb",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-41301073A85FF858",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2725,
+      "end_line": 2725,
+      "wording": "Both collapse toggles keep `aria-expanded` synchronised and swap `−` / `+` and their `title`.",
+      "normalized_sha256": "41301073a85ff85867f4d4fa6090f2c4137c44e0151b0cf32f6f055a46fbd1e2",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-41301073a85ff858",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-389210F26E19BCA9",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2726,
+      "end_line": 2726,
+      "wording": "`#network-beacon` is the only `aria-live` region.",
+      "normalized_sha256": "389210f26e19bca9fa5d6f43d2b07b805437c15472dc0aaa140c68fbe517576f",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-389210f26e19bca9",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-CE163F06EDA97B73",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2727,
+      "end_line": 2727,
+      "wording": "`#pass-rail` is the only element whose `aria-label` changes at runtime.",
+      "normalized_sha256": "ce163f06eda97b733b1af50af800192cef00d690c6cd38c2cf1c4627fdf6d3af",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-ce163f06eda97b73",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-395784C3F8A07E0F",
+      "section": "20.9",
+      "heading": "Keyboard and accessibility",
+      "start_line": 2728,
+      "end_line": 2728,
+      "wording": "No `role`, `tabindex`, `aria-selected`, or `aria-current` attributes exist anywhere. **[C]**",
+      "normalized_sha256": "395784c3f8a07e0fae6ff3b5cae7b1bd1026025a936cd06f1a52a5f99cc2a6dd",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-395784c3f8a07e0f",
+        "kind": "browser",
+        "auditor": "audit_keyboard_accessibility",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-B3A6CCEFFD7E18AD",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2732,
+      "end_line": 2732,
+      "wording": "`.shell` is `min(1580px, 100% − 26px)`.",
+      "normalized_sha256": "b3a6cceffd7e18ade4bf0375c43fc06a94661f27270d8f358c3a587a91b2cc8c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-b3a6cceffd7e18ad",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6B56089527EA46CA",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2733,
+      "end_line": 2733,
+      "wording": "Workspace tracks follow the formula in §15.2, including the 300px floor clamp.",
+      "normalized_sha256": "6b56089527ea46ca42ed5c8dd3e9947d865ae020be8671eaa39e55bde173260e",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6b56089527ea46ca",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-A273C9A99BDBE2E9",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2734,
+      "end_line": 2735,
+      "wording": "Collapsing the stage overview or the artifact card swaps the corresponding column to `54px` and adds `stage-collapsed` / `artifact-collapsed` to `#workspace`.",
+      "normalized_sha256": "a273c9a99bdbe2e9a3f30dfdc7ecf13088914abed3a1adda86fc3b234aadbf90",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-a273c9a99bdbe2e9",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-452B42EA593A0597",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2736,
+      "end_line": 2736,
+      "wording": "The four breakpoints behave exactly as tabulated in §11.1 (1180, 850, 820, 520).",
+      "normalized_sha256": "452b42ea593a05977a72f6eb6cf383b2e8b5cec0b942e19dd8db02341444ac6c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-452b42ea593a0597",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-FB11A609AB4C62D6",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2737,
+      "end_line": 2738,
+      "wording": "`.center` has no explicit `grid-template-columns`, so its implicit column is min-content sized and overflows the track by the per-substep amounts in §15.5. **[C]**",
+      "normalized_sha256": "fb11a609ab4c62d6134cfdef57740bca0b3d6ef646c23d2fea90ea1d0019510e",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-fb11a609ab4c62d6",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-2F6446201FF31D88",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2739,
+      "end_line": 2740,
+      "wording": "`#substep-strip` and `#pass-rail` do not scroll horizontally at ≥1181px; they widen the page instead. **[C]**",
+      "normalized_sha256": "2f6446201ff31d886918c2289591e799dc27ce5a84e89dbee5aaec3100c28420",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-2f6446201ff31d88",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-4947C76B307BE087",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2741,
+      "end_line": 2742,
+      "wording": "The sticky artifact card overlaps and occludes the intruding centre content, which is not hit-testable in the overlap band. **[C]**",
+      "normalized_sha256": "4947c76b307be087bec9887f3467af368bfb318b9a969a6f358ea2a1f40d1cdb",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-4947c76b307be087",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-4974C08B9F186024",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2743,
+      "end_line": 2744,
+      "wording": "The overlap persists at 1920px and 3840px for all 31 substeps whose `.center` min-content exceeds 772.7px. **[C]**",
+      "normalized_sha256": "4974c08b9f186024626435b570ede7267f3b33c6aa46e046318f4ac3e5499b11",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-4974c08b9f186024",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-F50E406232B48112",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2745,
+      "end_line": 2745,
+      "wording": "Below 820px the workspace resolves to a 953.6px single track inside an ~805px shell. **[C]**",
+      "normalized_sha256": "f50e406232b48112bac89a03601f7b625088bd5c4e9e2005d1a59356355a8833",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f50e406232b48112",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-83780410DCFD9092",
+      "section": "20.10",
+      "heading": "Layout, responsive, print",
+      "start_line": 2746,
+      "end_line": 2747,
+      "wording": "Print hides all `button` and `input` elements, which removes the entire walk tree and every rail; dark `pre` backgrounds are not reset. **[C]**",
+      "normalized_sha256": "83780410dcfd9092d7945aaa76ccba04031c16d160ede872df624ee07f1b5125",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-83780410dcfd9092",
+        "kind": "browser-geometry",
+        "auditor": "audit_layout_responsive_print",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-C806C3507F7B6C24",
+      "section": "20.11",
+      "heading": "Persistence and safety",
+      "start_line": 2751,
+      "end_line": 2752,
+      "wording": "No `localStorage`, `sessionStorage`, `indexedDB`, cookie, `history`, or hash state is written or read.",
+      "normalized_sha256": "c806c3507f7b6c246f3facb182b7e3e2ee823d85567a594bbf0b6864ebde3da8",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-c806c3507f7b6c24",
+        "kind": "browser",
+        "auditor": "audit_persistence_safety",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-2745315923BBBE0D",
+      "section": "20.11",
+      "heading": "Persistence and safety",
+      "start_line": 2753,
+      "end_line": 2753,
+      "wording": "A reload restores every documented initial-state value in §13.",
+      "normalized_sha256": "2745315923bbbe0dfc76d6a5a2d9e798f9779b8f65abbefdcbcaa0a645a1405c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-2745315923bbbe0d",
+        "kind": "browser",
+        "auditor": "audit_persistence_safety",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-0D4E4289069837DA",
+      "section": "20.11",
+      "heading": "Persistence and safety",
+      "start_line": 2754,
+      "end_line": 2754,
+      "wording": "The page issues no network request on load or during any interaction.",
+      "normalized_sha256": "0d4e4289069837dada539b9cfa89ed0d8ec078615a2b57115b2453695f5d952f",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-0d4e4289069837da",
+        "kind": "browser",
+        "auditor": "audit_persistence_safety",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6F6E77633B1B46EB",
+      "section": "20.11",
+      "heading": "Persistence and safety",
+      "start_line": 2755,
+      "end_line": 2756,
+      "wording": "No `try`/`catch`, no input validation, and no error surface exists; all \"failure\" content is static descriptive text.",
+      "normalized_sha256": "6f6e77633b1b46eb78d5746b94159b742f96a1d7187141909cea22bb0759417c",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "assets/walkthrough-template.html",
+        "tests/browser_smoke.py"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6f6e77633b1b46eb",
+        "kind": "browser",
+        "auditor": "audit_persistence_safety",
+        "test": "tests/browser_smoke.py"
+      }
+    },
+    {
+      "id": "AC-6DB2B5EDECEE517D",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2760,
+      "end_line": 2761,
+      "wording": "`stages[i].steps.length === preciseLinks[i].length === treeBehaviors[i].length === traversalCatalog[i].focuses.length` for all 10 stages.",
+      "normalized_sha256": "6db2b5edecee517d775849196814bf2afb9c3052f433289f60c1cf1603974849",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-6db2b5edecee517d",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-DE582E17DEB3EE99",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2762,
+      "end_line": 2762,
+      "wording": "Every `Step` tuple has arity 9; index `[8]` is present and unread. **[C]**",
+      "normalized_sha256": "de582e17deb3ee99c47b30e76fa883a3c711f2c790c987d307a3022ba80c9ae7",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-de582e17deb3ee99",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-62B7841144435A60",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2763,
+      "end_line": 2763,
+      "wording": "No substep key appears in more than one lab map.",
+      "normalized_sha256": "62b7841144435a606c20d2bbb46d09b9fa55e8409901a43f3967597db5281f28",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-62b7841144435a60",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-7FA7CA7A907FCE3A",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2764,
+      "end_line": 2765,
+      "wording": "`action.lang ∈ {cpp, rust, csharp}`; `frame.kind ∈ {cpp, csharp, rust, abi}`; `event.op ∈ {add, update, release}`; `event.zone ∈ {managed, borrowed, cpp, rust}`.",
+      "normalized_sha256": "7fa7ca7a907fce3a5685c5df373ec8db1bd5debe34b8e38bebfca1e19acdb40b",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-7fa7ca7a907fce3a",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-F778674AC8D86901",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2766,
+      "end_line": 2766,
+      "wording": "Every `action.active` and every entry of `action.live` is a key of `executionComponents`.",
+      "normalized_sha256": "f778674ac8d869011b6d410afbff2361f0697dccab802527fd1cb76f10c21a58",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-f778674ac8d86901",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-9429D5FA65F52CBC",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2767,
+      "end_line": 2767,
+      "wording": "`boundaryLabs` action lanes are drawn from `{C#, Interop, C++}`.",
+      "normalized_sha256": "9429d5fa65f52cbcb4ff515589600e71129ea7ac067dfa3c598eb1dffeb1b220",
+      "normative": true,
+      "current_behavior": false,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-9429d5fa65f52cbc",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-18A7272025C311CF",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2768,
+      "end_line": 2768,
+      "wording": "`methodTargets` contains exactly one duplicate key, `PassManager.Execute`. **[C]**",
+      "normalized_sha256": "18a7272025c311cf0190d101d68699b2c1a3e84aa43e34e0a0f53c3fe3c2b909",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-18a7272025c311cf",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    },
+    {
+      "id": "AC-71B148667C254CF3",
+      "section": "20.12",
+      "heading": "Data integrity",
+      "start_line": 2769,
+      "end_line": 2770,
+      "wording": "`--text` is referenced by four CSS rules and declared by none; `--surface` is declared and unused. **[C]**",
+      "normalized_sha256": "71b148667c254cf3f467abadb74617f60a7176a9f89bccabe48af4a6065a418f",
+      "normative": true,
+      "current_behavior": true,
+      "applicability": "always",
+      "implementation_surfaces": [
+        "scripts/canonical_spec.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html"
+      ],
+      "verification": {
+        "assertion": "verify-ac-71b148667c254cf3",
+        "kind": "static",
+        "auditor": "audit_data_integrity",
+        "test": "tests/test_spec_compliance.py"
+      }
+    }
+  ]
+}

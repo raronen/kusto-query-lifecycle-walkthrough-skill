@@ -47,27 +47,35 @@ class StaticParityTests(unittest.TestCase):
         self.assertNotIn("runner.boundary.node_ranges", self.template)
 
     def test_browser_smoke_visits_every_stage_and_substep(self) -> None:
-        self.assertIn("model.stages.forEach((stage, stageIndex)", self.template)
-        self.assertIn("stage.substeps.forEach((substep, substepIndex)", self.template)
+        smoke = (ROOT / "tests" / "browser_smoke.py").read_text(encoding="utf-8")
+        self.assertIn("data.stages.forEach((stage, stageIndex)", smoke)
+        self.assertIn("stage.substeps.forEach((substep, substepIndex)", smoke)
+        self.assertIn('len(result["visited"]) != 45', smoke)
         for lab_id in ("compiler-lab", "pass-lab", "physical-lab", "boundary-lab", "execute-lab"):
             with self.subTest(lab_id=lab_id):
                 self.assertIn(f'"{lab_id}"', self.template)
 
     def test_global_controls_have_event_handlers(self) -> None:
         for control_id in (
-            "stage-overview-toggle",
-            "substep-prev",
-            "substep-next",
-            "substep-slider",
-            "traversal-prev",
+            "stage-toggle",
+            "artifact-toggle",
+            "previous-step",
+            "next-step",
+            "step-slider",
+            "traversal-previous",
             "traversal-play",
             "traversal-slider",
-            "traversal-next",
-            "runner-reset",
-            "runner-prev",
-            "runner-next",
-            "runner-apply",
-            "runner-slider",
+            "traversal-next-button",
+            "compiler-reset",
+            "compiler-apply",
+            "pass-reset",
+            "pass-apply",
+            "physical-reset",
+            "physical-apply",
+            "boundary-reset",
+            "boundary-play",
+            "execution-reset",
+            "execution-apply",
         ):
             with self.subTest(control_id=control_id):
                 self.assertIn(f'byId("{control_id}").addEventListener', self.template)

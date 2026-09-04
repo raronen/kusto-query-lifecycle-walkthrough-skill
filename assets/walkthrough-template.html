@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <meta name="walkthrough-evidence-mode" content="__EVIDENCE_MODE__">
-  <title>__DOCUMENT_TITLE__</title>
+  <title>Kusto Query Lifecycle: Two-Level Interactive Walkthrough</title>
   <style>
     :root {
       color-scheme: dark;
@@ -24,6 +24,7 @@
       --blue: #79a9ff;
       --shadow: 0 20px 70px rgb(0 0 0 / 30%);
       --radius: 18px;
+      --surface: #101d31;
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -34,15 +35,15 @@
         radial-gradient(circle at 85% 0, rgb(101 219 245 / 12%), transparent 30rem),
         radial-gradient(circle at 8% 24%, rgb(183 155 255 / 10%), transparent 26rem),
         var(--bg);
-      color: var(--ink);
+      color: var(--text);
       font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     button, input, select { font: inherit; }
-    button, select { color: var(--ink); }
+    button, select { color: var(--text); }
     button { cursor: pointer; }
     a { color: var(--cyan); text-underline-offset: .18em; }
     a:hover { color: white; }
-    :focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+    :focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
     h1, h2, h3, h4, h5 { line-height: 1.14; margin: 0 0 .65rem; }
     h1 { max-width: 18ch; font-size: clamp(2rem, 5vw, 4.3rem); letter-spacing: -.045em; }
     h2 { font-size: clamp(1.45rem, 3vw, 2.25rem); }
@@ -65,7 +66,7 @@
     dl { margin: 0; }
     dt { color: var(--muted); }
     dd { margin: 0; overflow-wrap: anywhere; }
-    .shell { width: min(1520px, 100%); margin: auto; padding: clamp(.8rem, 3vw, 2.8rem); }
+    .shell { width: min(1580px, calc(100% - 26px)); margin: 13px auto 50px; }
     .card {
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -116,19 +117,18 @@
       background: rgb(255 209 119 / 8%);
     }
     .network-beacon {
-      position: sticky;
-      z-index: 5;
-      top: .5rem;
-      display: grid;
-      grid-template-columns: auto repeat(3, minmax(0, 1fr));
-      gap: .7rem;
-      align-items: center;
-      margin: 1rem 0;
-      padding: .7rem 1rem;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: rgb(7 17 31 / 94%);
-      backdrop-filter: blur(14px);
+      position: fixed;
+      z-index: 100;
+      right: 16px;
+      bottom: 14px;
+      width: min(390px, calc(100vw - 28px));
+      margin: 0;
+      padding: 11px 13px;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      background: rgb(8 19 33 / 97%);
+      box-shadow: 0 14px 40px rgb(0 0 0 / 46%);
+      backdrop-filter: blur(12px);
     }
     .beacon-dot { width: .65rem; height: .65rem; border-radius: 50%; background: var(--green); box-shadow: 0 0 18px currentColor; }
     .beacon-field strong { display: block; color: var(--cyan); font-size: .7rem; text-transform: uppercase; }
@@ -136,7 +136,7 @@
     .rail {
       display: flex;
       gap: .55rem;
-      overflow-x: auto;
+      overflow-x: visible;
       padding: .25rem .1rem .75rem;
       scrollbar-color: var(--line) transparent;
     }
@@ -147,12 +147,12 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--panel);
-      color: var(--ink);
+      color: var(--text);
       text-align: left;
     }
     .rail-button:hover { border-color: var(--cyan); }
-    .rail-button[aria-selected="true"] {
-      border-color: var(--cyan);
+    .rail-button.selected {
+      border-color: var(--amber);
       background: linear-gradient(135deg, rgb(101 219 245 / 18%), rgb(183 155 255 / 12%));
       box-shadow: inset 0 0 0 1px rgb(101 219 245 / 34%);
     }
@@ -209,7 +209,7 @@
       border-radius: 9px;
       background: var(--panel-3);
     }
-    .substep-detail, .traversal-lab, .runner-lab, .additional-context { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 15px; background: rgb(11 23 40 / 78%); }
+    .substep-detail, .traversal-lab, .runner-lab, .additional-context { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 15px; background: rgb(11 23 40 / 78%); color: var(--text); }
     .method-path { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0; }
     .method-path code { padding: .25rem .45rem; border-radius: 7px; background: var(--panel-2); color: var(--violet); }
     .method-path code + code::before { content: "→"; margin-right: .45rem; color: var(--muted); }
@@ -218,7 +218,9 @@
     .tree ul { list-style: none; margin: .65rem 0 0 1.1rem; padding-left: 1rem; border-left: 1px solid var(--line); }
     .tree li { margin: .65rem 0; }
     .tree-node { min-width: 16rem; }
-    .tree-node.active { border-color: var(--amber); box-shadow: inset 0 0 0 1px rgb(255 209 119 / 35%); }
+    .tree-node.current { border-color: var(--amber); box-shadow: inset 0 0 0 1px rgb(255 209 119 / 35%); }
+    .tree-node.returning { border-color: var(--violet); }
+    .tree-node.visited { border-color: var(--green); }
     details.artifact-panel, details.deep-dive, details.input-contract {
       margin-top: 1rem;
       border: 1px solid var(--line);
@@ -257,13 +259,34 @@
       overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
     }
     [hidden] { display: none !important; }
-    @media (max-width: 1050px) {
+    .journey-controls { display: grid; grid-template-columns: auto 1fr auto; gap: .7rem; align-items: center; margin: 1rem 0; }
+    .workspace { display: grid; grid-template-columns: minmax(300px, .75fr) minmax(300px, 2fr) minmax(300px, .9fr); gap: 1rem; }
+    .workspace.stage-collapsed { grid-template-columns: 54px minmax(300px, 2fr) minmax(300px, .9fr); }
+    .workspace.artifact-collapsed { grid-template-columns: minmax(300px, .75fr) minmax(300px, 2fr) 54px; }
+    .center { display: grid; }
+    .network-top { display:flex; justify-content:space-between; gap:.75rem; }
+    .network-state::before { content:""; display:inline-block; width:8px; height:8px; margin-right:.4rem; border-radius:50%; background:currentColor; }
+    .network-beacon.none { border-color:rgb(112 225 175 / 48%); }
+    .network-beacon.possible { border-color:rgb(255 209 119 / 70%); }
+    .network-beacon.imminent { border-color:rgb(255 145 160 / 72%); }
+    .network-beacon.active { border-color:#ff5877; background:rgb(40 10 22 / 98%); animation:beacon-pulse 1.25s ease-in-out infinite; }
+    .network-beacon.none .network-state { color:var(--green); }
+    .network-beacon.possible .network-state { color:var(--amber); }
+    .network-beacon.imminent .network-state { color:#ff8caf; }
+    .network-beacon.active .network-state { color:#ff6f89; }
+    @keyframes beacon-pulse { 50% { opacity: .35; transform: scale(.8); } }
+    @media (max-width: 1180px) {
+      .rail { overflow-x: auto; }
+      .workspace { grid-template-columns: minmax(300px, 1fr) minmax(300px, 2fr); }
       .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .lane-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .network-beacon { grid-template-columns: auto 1fr; }
       .beacon-field { grid-column: 2; }
     }
-    @media (max-width: 720px) {
+    @media (max-width: 850px) {
+      .workspace { grid-template-columns: minmax(300px, 1fr); }
+    }
+    @media (max-width: 820px) {
       .hero, .detail-grid, .fact-grid, .compare-grid, .stack-heap, .overview-grid, .lane-grid { grid-template-columns: 1fr; }
       .section-head, .runner-title { display: block; }
       .query-card dl, .component dl { grid-template-columns: 1fr; }
@@ -271,987 +294,223 @@
       .lab-controls, .traversal-controls { grid-template-columns: repeat(2, 1fr); }
       .lab-controls input, .traversal-controls input { grid-column: 1 / -1; }
     }
+    @media (max-width: 520px) {
+      .shell { width: calc(100% - 26px); }
+      .network-beacon { left: 13px; right: 13px; }
+    }
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
     }
     @media print {
-      :root { color-scheme: light; --bg: white; --panel: white; --panel-2: #f7f9fc; --panel-3: #eef2f7; --ink: #111827; --muted: #4b5563; --line: #cbd5e1; }
-      body { background: white; }
-      .shell { width: 100%; padding: 0; }
-      .network-beacon, .rail, .substep-controls, .lab-controls, .traversal-controls { display: none; }
-      .card { box-shadow: none; }
+      body { background:#fff; color:#000; }
+      .shell { width: 100%; }
+      button, input { display: none !important; }
+      .card,.top-header,.level-one { background:#fff; border-color:#bbb; box-shadow:none; }
+      .stage-overview,.artifact-card { position:static; }
       details { break-inside: avoid; }
       details > .details-body { display: block !important; }
-      a { color: #075985; }
+      a { color: #75d5ef; }
     }
+    /* Canonical authored topology. Intentional min-content behavior is preserved. */
+    .top-header { display:flex; justify-content:space-between; gap:28px; padding:22px; }
+    .level-key { display:grid; grid-template-columns:auto 1fr; gap:.25rem .7rem; min-width:260px; }
+    .level-key b { color:var(--amber); }
+    .level-one { margin:14px 0; }
+    #stage-strip { display:grid; grid-template-columns:repeat(10,minmax(125px,1fr)); gap:7px; overflow-x:auto; padding:2px 2px 8px; }
+    .stage-button { position:relative; min-height:91px; padding:10px 9px; border:1px solid var(--line); border-radius:11px; background:var(--panel); color:var(--ink); text-align:left; }
+    .stage-button span { display:block; } .stage-button .num { display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#233c5c; color:var(--blue); }
+    .stage-button.selected { border-color:var(--amber); background:rgb(255 199 102 / 11%); }
+    .stage-button.selected .num { background:var(--amber); color:#172033; }
+    .stage-button.visited:not(.selected)::after { content:"✓"; position:absolute; top:7px; right:8px; color:var(--green); }
+    .workspace { display:grid; grid-template-columns:minmax(300px,.72fr) minmax(560px,1.45fr) minmax(300px,.75fr); gap:12px; align-items:start; }
+    .workspace.artifact-collapsed { grid-template-columns:minmax(300px,.72fr) minmax(560px,1.45fr) 54px; }
+    .workspace.stage-collapsed { grid-template-columns:54px minmax(560px,1.45fr) minmax(300px,.75fr); }
+    .workspace.stage-collapsed.artifact-collapsed { grid-template-columns:54px minmax(560px,1.45fr) 54px; }
+    .stage-overview,.artifact-card { position:sticky; top:12px; padding:18px; }
+    .stage-overview-header,.artifact-card-header,.lab-head { display:flex; justify-content:space-between; gap:1rem; }
+    .stage-toggle,.artifact-toggle { width:32px; height:32px; border:1px solid var(--line); border-radius:8px; background:var(--panel-3); }
+    .stage-compact { display:none; }
+    .stage-overview.collapsed,.artifact-card.collapsed { padding:10px; }
+    .stage-overview.collapsed #stage-badge,.stage-overview.collapsed #stage-overview-body,.artifact-card.collapsed h2,.artifact-card.collapsed #artifact-body { display:none; }
+    .stage-overview.collapsed .stage-compact { display:block; }
+    .ownership { display:grid; gap:7px; } .ownership>div,.handoff { padding:.7rem; border:1px solid var(--line); border-radius:9px; background:var(--panel-2); }
+    .stage-nav { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:.8rem; }
+    .center { display: grid; }
+    .center { gap:12px; }
+    .level-two,.step-detail,.call-card,.traversal-card,.compiler-lab,.pass-lab,.physical-lab,.boundary-lab,.execution-lab { padding:16px; }
+    #substep-strip { display:flex; gap:7px; overflow-x:auto; margin-top:10px; padding-bottom:5px; }
+    .substep-card { display:flex; flex:0 0 auto; flex-direction:column; width:155px; min-width:155px; max-width:205px; }
+    .substep { min-width:155px; padding:.65rem; border:1px solid var(--line); border-radius:9px 9px 0 0; background:var(--panel-3); color:var(--ink); text-align:left; }
+    .substep.done { border-color:var(--green); } .substep.selected { border-color:var(--cyan); background:rgb(79 224 208 / 10%); }
+    .substep-code-link { padding:.3rem .5rem; border:1px solid var(--line); border-top:0; border-radius:0 0 9px 9px; font-size:.7rem; }
+    .substep-behavior { display:flex; flex-wrap:wrap; gap:.25rem; margin-top:.4rem; }
+    .walk,.change,.runner-count { padding:.12rem .3rem; border:1px solid currentColor; border-radius:999px; font-size:.65rem; }
+    .walk { color:var(--cyan); } .change { color:var(--amber); } .runner-count { color:var(--green); }
+    .walk-controls { display:grid; grid-template-columns:auto minmax(130px,1fr) auto; gap:8px; margin-top:.7rem; }
+    .compiler-lab,.pass-lab,.physical-lab,.boundary-lab,.execution-lab { display:none; border:1px solid var(--line); border-radius:14px; background:rgb(5 18 29 / 92%); box-shadow:var(--shadow); }
+    .compiler-lab.visible,.pass-lab.visible,.physical-lab.visible,.boundary-lab.visible,.execution-lab.visible { display:block; }
+    .compiler-lab.syntax { border-color:var(--blue); } .compiler-lab.semantic { border-color:var(--violet); } .compiler-lab.relop { border-color:var(--green); }
+    .lab-controls { display:flex; flex-wrap:wrap; gap:7px; margin:.7rem 0; }
+    .chip-rail { display:flex; gap:6px; overflow-x:auto; padding:2px; }
+    .action-chip,.pass-chip { min-width:38px; height:32px; border:1px solid var(--line); border-radius:8px; background:var(--panel-3); }
+    .pass-chip { min-width:36px; width:36px; } .action-chip.selected,.pass-chip.selected { border-color:var(--cyan); } .action-chip.applied,.pass-chip.applied { color:var(--green); }
+    .pass-chip.applied::after { content:"✓"; }
+    .state-grid,.pass-tree-grid,.boundary-workspace,.execution-runtime-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+    #additional-context-body { overflow-x:auto; }
+    #additional-context .data-table { min-width:760px; }
+    .boundary-workspace { min-width:780px; grid-template-columns:minmax(320px,.9fr) minmax(390px,1.1fr); gap:10px; }
+    .state-panel,.boundary-panel,.execution-stack,.execution-heap { min-width:0; padding:.8rem; border:1px solid var(--line); border-radius:10px; background:var(--panel-3); }
+    .compiler-state { min-height:220px; max-height:410px; } .pass-tree-panel pre { min-height:292px; }
+    .pass-row { cursor:pointer; } .pass-row.selected td { background:rgb(79 224 208 / 9%); }
+    .pass-mark.changes { color:var(--green); } .pass-mark.same { color:var(--muted); } .pass-mark.applied { box-shadow:0 0 0 2px rgb(79 224 208 / 35%); }
+    .boundary-lanes,.execution-lanes,.execution-components,.execution-ownership,.boundary-byte-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+    .boundary-lane,.execution-lane,.execution-component,.heap-zone { padding:.7rem; border:1px solid var(--line); border-radius:9px; background:var(--panel-2); }
+    .boundary-lane.active,.execution-lane.active,.execution-component.active { border-color:var(--red); } .boundary-lane.complete,.execution-component.waiting { border-color:var(--amber); } .execution-component.off { opacity:.4; border-style:dashed; }
+    .boundary-code { min-height:245px; max-height:440px; }
+    .button-row { display:flex; flex-wrap:wrap; gap:6px; margin:.6rem 0; } .button-row .selected { border-color:var(--amber); }
+    .execution-runtime-grid { grid-template-columns:minmax(270px,.72fr) minmax(390px,1.28fr); }
+    .execution-stack,.execution-heap { min-height:305px; }
+    .stack-frame,.heap-object { margin-top:.5rem; padding:.65rem; border:1px solid var(--line); border-left:4px solid var(--blue); border-radius:8px; background:#081522; }
+    .stack-frame b { color:var(--ink); } .stack-frame.cpp { border-left-color:var(--amber); } .stack-frame.rust { border-left-color:var(--green); }
+    .heap-object strong { color:var(--ink); } .heap-object.mutated { border-color:var(--amber); } .heap-object.released { opacity:.48; border-style:dashed; } .heap-object.released strong { text-decoration:line-through; }
+    .execution-component b { color:var(--ink); }
+    .boundary-toggle b { color:var(--ink); }
+    .walk-layout { display:grid; grid-template-columns:minmax(330px,1.15fr) minmax(250px,.85fr); gap:12px; }
+    .walk-tree { min-height:430px; max-height:620px; overflow:auto; padding:12px; background:var(--panel-3); }
+    .walk-tree ul { list-style:none; margin:0; padding-left:20px; border-left:1px solid var(--line); }
+    .walk-node-row { display:grid; grid-template-columns:minmax(0,1fr) 28px; gap:5px; margin:7px 0; }
+    .walk-node { position:relative; min-width:285px; padding:.65rem .65rem .65rem 34px; border:1px solid var(--line); border-left:4px solid #496681; border-radius:8px; background:#122238; color:var(--muted); text-align:left; }
+    .walk-node::before { content:attr(data-order); position:absolute; left:10px; } .walk-node.visited { border-left-color:var(--green); opacity:.78; } .walk-node.visited::before { content:"✓"; }
+    .walk-node.current { border-color:var(--amber); transform:translateX(5px); } .walk-node.returning { border-color:var(--blue); }
+    .traversal-fact { margin-bottom:7px; padding:.7rem; border:1px solid var(--line); border-radius:9px; background:var(--panel-2); }
+    @media (max-width:1180px) {
+      .workspace,.workspace.artifact-collapsed { grid-template-columns:minmax(280px,.7fr) minmax(500px,1.3fr); }
+      .workspace.stage-collapsed,.workspace.stage-collapsed.artifact-collapsed { grid-template-columns:54px minmax(500px,1fr); }
+      .artifact-card { position:static; grid-column:1/-1; } .artifact-card.collapsed { justify-self:end; }
+    }
+    @media (max-width:850px) { .state-grid,.pass-tree-grid,.boundary-workspace,.boundary-lanes,.execution-runtime-grid,.execution-ownership { grid-template-columns:1fr; } .execution-components { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media (max-width:820px) {
+      .top-header { flex-direction:column; } .workspace,.workspace.artifact-collapsed,.workspace.stage-collapsed,.workspace.stage-collapsed.artifact-collapsed { grid-template-columns:1fr; }
+      .stage-overview { position:static; } .stage-overview.collapsed { justify-self:end; } .detail-grid,.walk-layout { grid-template-columns:1fr; } .artifact-card { grid-column:auto; }
+    }
+    @media (max-width:520px) { .shell { width:calc(100% - 12px); } .stage-nav,.walk-controls,.boundary-lanes,.boundary-byte-grid,.execution-lanes,.execution-components { grid-template-columns:1fr; } .level-key { min-width:0; } .network-beacon { left:auto; right:7px; bottom:7px; width:calc(100vw - 14px); } }
   </style>
 </head>
 <body>
-  <main class="shell">
-    <header class="hero card">
-      <div>
-        <div class="eyebrow">Kusto query lifecycle</div>
-        <h1>__DOCUMENT_TITLE__</h1>
-        <p class="muted">A query-specific, source-grounded journey from syntax through execution.</p>
-      </div>
-      <div class="mode" id="evidence-mode">__EVIDENCE_MODE__</div>
-    </header>
-
-    <section class="query-card card" aria-labelledby="query-heading">
-      <h2 id="query-heading">Query context</h2>
-      <dl>
-        <dt>Cluster</dt><dd id="cluster"></dd>
-        <dt>Database</dt><dd id="database"></dd>
-        <dt>Source commit</dt><dd><code id="commit"></code></dd>
-      </dl>
-      <pre id="query-text" aria-label="Supplied query text"></pre>
-      <p class="callout" id="estimate-reason" hidden></p>
-    </section>
-
-    <aside class="network-beacon" id="network-beacon" data-feature-id="network-beacon" aria-live="polite" aria-label="Outbound HTTP status">
-      <span class="beacon-dot" aria-hidden="true"></span>
-      <div class="beacon-field"><strong>State</strong><span id="network-state"></span></div>
-      <div class="beacon-field"><strong>Route</strong><span id="network-route"></span></div>
-      <div class="beacon-field"><strong>Purpose</strong><span id="network-purpose"></span></div>
-    </aside>
-
-    <nav class="rail" id="stage-nav" data-feature-id="stage-navigation" aria-label="Ten query lifecycle phases"></nav>
-    <section class="stage-panel card" id="stage-panel" aria-live="polite">
-      <header class="section-head">
-        <div><div class="eyebrow" id="stage-number"></div><h2 id="stage-title"></h2></div>
-        <span class="badge" id="stage-badge"></span>
-      </header>
-
-      <section id="stage-overview" data-feature-id="stage-overview">
-        <div class="section-head">
-          <div><h3>Detailed stage overview</h3><p id="stage-summary"></p></div>
-          <button class="toggle" id="stage-overview-toggle" data-feature-id="stage-overview-toggle" type="button" aria-expanded="true" aria-controls="stage-overview-body">Collapse overview</button>
-        </div>
-        <div id="stage-overview-body">
-          <div class="overview-grid" id="stage-overview-grid" data-feature-id="stage-overview-grid"></div>
-          <div class="callout" id="no-op" hidden></div>
-          <div class="links" id="stage-links"></div>
-        </div>
-      </section>
-
-      <section class="substep-shell" aria-labelledby="substep-heading">
-        <h3 id="substep-heading">Query-specific substeps</h3>
-        <nav class="rail" id="substep-rail" data-feature-id="substep-rail" aria-label="Substeps in selected phase"></nav>
-        <div class="substep-controls">
-          <button class="control-button" id="substep-prev" data-feature-id="substep-prev" type="button">Previous substep</button>
-          <label><span class="sr-only">Selected substep</span><input id="substep-slider" data-feature-id="substep-slider" type="range" min="0" value="0"></label>
-          <button class="control-button" id="substep-next" data-feature-id="substep-next" type="button">Next substep</button>
-        </div>
-
-        <article class="substep-detail" id="substep-detail" data-feature-id="substep-detail">
-          <header class="section-head">
-            <div><div class="eyebrow" id="substep-number"></div><h3 id="substep-title"></h3></div>
-            <div><span class="badge" id="substep-behavior"></span> <span class="badge" id="substep-change"></span></div>
-          </header>
-          <p id="substep-summary"></p>
-          <div class="detail-grid" id="substep-facts"></div>
-          <h4>Method path</h4>
-          <div class="method-path" id="method-path"></div>
-          <div class="links" id="substep-links"></div>
-        </article>
-
-        <section class="traversal-lab" id="traversal-lab" data-feature-id="traversal-lab" aria-labelledby="traversal-heading">
-          <div class="section-head">
-            <div><div class="eyebrow">Linked traversal</div><h3 id="traversal-heading">Walk the evidence tree</h3></div>
-            <span class="state-pill" id="traversal-status"></span>
-          </div>
-          <div class="tree" id="traversal-tree"></div>
-          <div class="traversal-controls">
-            <button class="control-button" id="traversal-prev" data-feature-id="traversal-prev" type="button">Previous node</button>
-            <button class="control-button" id="traversal-play" data-feature-id="traversal-play" type="button">Play traversal</button>
-            <label><span class="sr-only">Traversal position</span><input id="traversal-slider" data-feature-id="traversal-slider" type="range" min="0" value="0"></label>
-            <button class="control-button" id="traversal-next" data-feature-id="traversal-next" type="button">Next node</button>
-          </div>
-          <div class="fact-grid" id="traversal-facts"></div>
-        </section>
-
-        <details class="artifact-panel" id="artifact-panel" data-feature-id="artifact-panel">
-          <summary id="artifact-title">Before/after artifact</summary>
-          <div class="details-body">
-            <div class="compare-grid">
-              <section class="panel diff-before"><h4>Before</h4><pre id="artifact-before"></pre></section>
-              <section class="panel diff-after"><h4>After</h4><pre id="artifact-after"></pre></section>
-            </div>
-            <h4>Linked operators</h4>
-            <div class="rail" id="artifact-operators"></div>
-          </div>
-        </details>
-
-        <section class="runner-lab" id="runner-lab" data-feature-id="runner-lab" aria-labelledby="runner-heading">
-          <header class="runner-title">
-            <div><div class="eyebrow" id="runner-kind"></div><h3 id="runner-heading"></h3></div>
-            <span class="state-pill" id="runner-status"></span>
-          </header>
-          <div class="lab-controls">
-            <button class="control-button" id="runner-reset" data-feature-id="runner-reset" type="button">Reset</button>
-            <button class="control-button" id="runner-prev" data-feature-id="runner-prev" type="button">Previous</button>
-            <button class="control-button" id="runner-next" data-feature-id="runner-next" type="button">Next</button>
-            <button class="control-button primary" id="runner-apply" data-feature-id="runner-apply" type="button">Apply step</button>
-            <label><span class="sr-only">Runner progress</span><input id="runner-slider" data-feature-id="runner-slider" type="range" min="0" value="0"></label>
-          </div>
-          <div class="progress" aria-label="Runner progress"><span id="runner-progress"></span></div>
-          <nav class="rail action-rail" id="runner-action-rail" data-feature-id="runner-action-rail" aria-label="Runner actions"></nav>
-          <div class="runner-state" id="runner-state"></div>
-          <div id="runner-specialized"></div>
-          <div class="links" id="runner-links"></div>
-        </section>
-
-        <section class="additional-context" id="additional-context" data-feature-id="additional-context" hidden>
-          <h3>Additional context</h3>
-          <div id="additional-context-body"></div>
-        </section>
-      </section>
-    </section>
-    <footer>Generated locally from validated evidence. The supplied query was never executed.</footer>
-  </main>
-
-  <script type="application/json" id="walkthrough-data">__MODEL_JSON__</script>
-  <script>
-    "use strict";
-    const FEATURE_IDS = Object.freeze([
-      "network-beacon", "stage-navigation", "stage-overview", "stage-overview-toggle",
-      "stage-overview-grid", "substep-rail", "substep-prev", "substep-slider",
-      "substep-next", "substep-detail", "traversal-lab", "traversal-prev",
-      "traversal-play", "traversal-slider", "traversal-next", "artifact-panel",
-      "runner-lab", "runner-reset", "runner-prev", "runner-next", "runner-apply",
-      "runner-slider", "runner-action-rail", "additional-context", "compiler-lab",
-      "pass-lab", "physical-lab", "physical-deep-dive", "boundary-lab",
-      "execute-lab", "conceptual-call-stack", "heap-lifetime-zones", "runtime-components"
-    ]);
-    const model = JSON.parse(document.getElementById("walkthrough-data").textContent);
-    const byId = (id) => document.getElementById(id);
-    const node = (tag, className, text) => {
-      const item = document.createElement(tag);
-      if (className) item.className = className;
-      if (text !== undefined) item.textContent = String(text);
-      return item;
-    };
-    const clear = (item) => item.replaceChildren();
-    const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
-    const badgeClass = (kind) => `badge ${String(kind).toLowerCase().replaceAll("_", "-")}`;
-    const state = { stage: 0, substep: 0, traversal: 0, runner: 0, playing: false, playTimer: null };
-
-    function updateNetwork(nextState, route, purpose) {
-      byId("network-state").textContent = nextState;
-      byId("network-route").textContent = route;
-      byId("network-purpose").textContent = purpose;
-    }
-
-    function sourceAnchor(link) {
-      const anchor = node("a", "", `${link.label} · L${link.start_line}-${link.end_line}`);
-      anchor.href = link.url;
-      anchor.target = "_blank";
-      anchor.rel = "noreferrer";
-      anchor.addEventListener("click", () => {
-        const destination = new URL(link.url);
-        updateNetwork("OPENING", `${destination.host}${destination.pathname}`, `Open ${link.label}`);
-        window.setTimeout(() => updateNetwork("OPENED", destination.host, "Exact commit-pinned source evidence"), 250);
-      });
-      return anchor;
-    }
-
-    function appendLinks(container, links) {
-      clear(container);
-      for (const link of links || []) container.append(sourceAnchor(link));
-    }
-
-    function linksBlock(links) {
-      const block = node("div", "links");
-      for (const link of links || []) block.append(sourceAnchor(link));
-      return block;
-    }
-
-    function fact(label, value) {
-      const item = node("div", "fact");
-      item.append(node("strong", "", label), node("span", "", value));
-      return item;
-    }
-
-    function renderTable(headers, rows, className = "data-table") {
-      const table = node("table", className);
-      const head = node("thead");
-      const headerRow = node("tr");
-      for (const header of headers) headerRow.append(node("th", "", header));
-      head.append(headerRow);
-      const body = node("tbody");
-      for (const row of rows) {
-        const tr = node("tr");
-        for (const value of row) tr.append(node("td", "", value));
-        body.append(tr);
-      }
-      table.append(head, body);
-      return table;
-    }
-
-    function currentStage() { return model.stages[state.stage]; }
-    function currentSubstep() { return currentStage().substeps[state.substep]; }
-    function currentRunner() { return currentSubstep().runner; }
-    function runnerSnapshots() { return currentRunner().snapshots; }
-
-    function setCollapsed(button, body, collapsed, expandedLabel, collapsedLabel) {
-      button.setAttribute("aria-expanded", String(!collapsed));
-      body.hidden = collapsed;
-      button.textContent = collapsed ? expandedLabel : collapsedLabel;
-    }
-
-    function renderOverview(stage) {
-      const fields = [
-        ["Input", stage.overview.input],
-        ["Output", stage.overview.output],
-        ["Owner", stage.overview.owner],
-        ["Not responsible", stage.overview.not_responsible],
-        ["Handoff", stage.overview.handoff]
-      ];
-      const grid = byId("stage-overview-grid");
-      clear(grid);
-      for (const [label, value] of fields) grid.append(fact(label, value));
-      byId("no-op").hidden = !stage.no_op_explanation;
-      byId("no-op").textContent = stage.no_op_explanation ? `Why no transformation occurs: ${stage.no_op_explanation}` : "";
-      appendLinks(byId("stage-links"), stage.source_links);
-    }
-
-    function railButton(kicker, title, selected, click, badges = []) {
-      const button = node("button", "rail-button");
-      button.type = "button";
-      button.setAttribute("aria-selected", String(selected));
-      button.append(node("small", "", kicker), node("strong", "", title));
-      if (badges.length) {
-        const row = node("span", "rail-badges");
-        for (const value of badges) row.append(node("span", badgeClass(value), value));
-        button.append(row);
-      }
-      button.addEventListener("click", click);
-      return button;
-    }
-
-    function renderSubstepRail(stage) {
-      const rail = byId("substep-rail");
-      clear(rail);
-      stage.substeps.forEach((substep, index) => {
-        rail.append(railButton(
-          `Substep ${index + 1} · ${substep.runner.actions.length} runner action${substep.runner.actions.length === 1 ? "" : "s"}`,
-          substep.title,
-          index === state.substep,
-          () => selectSubstep(index),
-          [substep.behavior, substep.change_badge]
-        ));
-      });
-      const slider = byId("substep-slider");
-      slider.max = String(stage.substeps.length - 1);
-      slider.value = String(state.substep);
-      byId("substep-prev").disabled = state.substep === 0;
-      byId("substep-next").disabled = state.substep === stage.substeps.length - 1;
-    }
-
-    function selectSubstep(index) {
-      stopTraversal();
-      state.substep = clamp(index, 0, currentStage().substeps.length - 1);
-      state.traversal = 0;
-      state.runner = 0;
-      renderSubstep();
-    }
-
-    function renderSubstepDetail(substep) {
-      byId("substep-number").textContent = `Substep ${state.substep + 1} of ${currentStage().substeps.length}`;
-      byId("substep-title").textContent = substep.title;
-      byId("substep-behavior").textContent = substep.behavior;
-      byId("substep-behavior").className = badgeClass(substep.behavior);
-      byId("substep-change").textContent = substep.change_badge;
-      byId("substep-change").className = badgeClass(substep.change_badge);
-      byId("substep-summary").textContent = substep.summary;
-      const facts = byId("substep-facts");
-      clear(facts);
-      const values = [
-        ["What happens", substep.what_happens],
-        ["Why", substep.why],
-        ["Debug", substep.debug],
-        ["Next", substep.next]
-      ];
-      for (const [label, value] of values) facts.append(fact(label, value));
-      const methodPath = byId("method-path");
-      clear(methodPath);
-      for (const method of substep.method_path) methodPath.append(node("code", "", method));
-      appendLinks(byId("substep-links"), substep.source_links);
-    }
-
-    function renderTraversal(substep) {
-      const traversal = substep.traversal;
-      state.traversal = clamp(state.traversal, 0, traversal.snapshots.length - 1);
-      const snapshot = traversal.snapshots[state.traversal];
-      const tree = byId("traversal-tree");
-      clear(tree);
-      const list = node("ul");
-      traversal.nodes.forEach((treeNode, index) => {
-        const item = node("li");
-        const card = node("article", `tree-node${treeNode.id === snapshot.current ? " active" : ""}`);
-        card.append(node("code", "", treeNode.id), node("h4", "", treeNode.label), node("span", "state", treeNode.state), linksBlock(treeNode.source_links));
-        item.append(card);
-        list.append(item);
-      });
-      tree.append(list);
-      const slider = byId("traversal-slider");
-      slider.max = String(traversal.snapshots.length - 1);
-      slider.value = String(state.traversal);
-      byId("traversal-prev").disabled = state.traversal === 0;
-      byId("traversal-next").disabled = state.traversal === traversal.snapshots.length - 1;
-      byId("traversal-status").textContent = `${state.traversal + 1} / ${traversal.snapshots.length}`;
-      const facts = byId("traversal-facts");
-      clear(facts);
-      for (const [label, value] of [
-        ["Current", snapshot.current],
-        ["Movement", snapshot.movement],
-        ["Return", snapshot.return_value],
-        ["Next", snapshot.next]
-      ]) facts.append(fact(label, value));
-    }
-
-    function stopTraversal() {
-      if (state.playTimer) window.clearInterval(state.playTimer);
-      state.playTimer = null;
-      state.playing = false;
-      const button = byId("traversal-play");
-      if (button) button.textContent = "Play traversal";
-    }
-
-    function toggleTraversal() {
-      if (state.playing) {
-        stopTraversal();
-        return;
-      }
-      state.playing = true;
-      byId("traversal-play").textContent = "Pause traversal";
-      state.playTimer = window.setInterval(() => {
-        const maximum = currentSubstep().traversal.snapshots.length - 1;
-        if (state.traversal >= maximum) {
-          stopTraversal();
-          return;
-        }
-        state.traversal += 1;
-        renderTraversal(currentSubstep());
-      }, 700);
-    }
-
-    function renderArtifact(substep) {
-      const artifact = substep.artifact;
-      byId("artifact-title").textContent = artifact.title;
-      byId("artifact-panel").open = !artifact.collapsed_by_default;
-      byId("artifact-before").textContent = artifact.before;
-      byId("artifact-after").textContent = artifact.after;
-      const rail = byId("artifact-operators");
-      clear(rail);
-      for (const operator of artifact.operators) {
-        const card = node("article", "tree-node");
-        card.append(node("code", "", operator.id), node("h4", "", operator.label), node("span", "state", operator.state), linksBlock(operator.source_links));
-        rail.append(card);
-      }
-    }
-
-    function renderRunnerAction(runner) {
-      state.runner = clamp(state.runner, 0, runner.snapshots.length - 1);
-      const actionIndex = clamp(state.runner, 0, runner.actions.length - 1);
-      const action = runner.actions[actionIndex];
-      const snapshot = runner.snapshots[state.runner];
-      const content = byId("runner-state");
-      clear(content);
-      const header = node("div", "section-head");
-      header.append(node("h4", "", action.title), node("span", badgeClass(action.evidence_kind), action.evidence_kind));
-      content.append(header, node("p", "", action.what));
-      const facts = node("div", "fact-grid");
-      for (const [label, value] of [
-        ["Why", action.why],
-        ["Result", action.result],
-        ["Stack effect", action.stack_effect],
-        ["Heap/lifetime effect", action.heap_effect],
-        ["Current", snapshot.current],
-        ["Next", snapshot.next]
-      ]) facts.append(fact(label, value));
-      content.append(facts);
-      const compare = node("div", "compare-grid");
-      const before = node("section", "panel diff-before");
-      before.append(node("h4", "", "Before"), node("pre", "", action.before));
-      const after = node("section", "panel diff-after");
-      after.append(node("h4", "", "After"), node("pre", "", action.after));
-      compare.append(before, after);
-      content.append(compare, linksBlock(action.source_links), node("p", "muted", snapshot.visible_state));
-      byId("runner-status").textContent = `${snapshot.label} · ${snapshot.progress}%`;
-      byId("runner-progress").style.width = `${snapshot.progress}%`;
-      const slider = byId("runner-slider");
-      slider.max = String(runner.snapshots.length - 1);
-      slider.value = String(state.runner);
-      byId("runner-prev").disabled = state.runner === 0;
-      byId("runner-next").disabled = state.runner === runner.snapshots.length - 1;
-      byId("runner-apply").disabled = state.runner === runner.snapshots.length - 1;
-      [...byId("runner-action-rail").children].forEach((button, index) => button.setAttribute("aria-selected", String(index === actionIndex)));
-    }
-
-    function renderExperiments(runner, container) {
-      for (const experiment of runner.experiments) {
-        const panel = node("section", "experiment");
-        panel.append(node("h4", "", experiment.title));
-        const select = node("select");
-        select.setAttribute("aria-label", experiment.title);
-        for (const option of experiment.options) {
-          const item = node("option", "", option.label);
-          item.value = option.id;
-          select.append(item);
-        }
-        const result = node("div", "experiment-result");
-        const show = () => {
-          const match = experiment.results.find((entry) => entry.option_id === select.value);
-          result.textContent = match ? match.result : "No result is defined.";
-        };
-        select.addEventListener("change", show);
-        panel.append(select, result, linksBlock(experiment.source_links));
-        container.append(panel);
-        show();
-      }
-    }
-
-    function renderCompiler(runner, container) {
-      const section = node("section", "panel");
-      section.id = "compiler-lab";
-      section.dataset.featureId = "compiler-lab";
-      section.append(node("h4", "", `Compiler mode · ${runner.compiler.mode}`));
-      section.append(renderTable(
-        ["Before action", "Input", "Result"],
-        runner.compiler.before_actions.map((item) => [item.title, item.before, item.result])
-      ));
-      section.append(renderTable(
-        ["After action", "Output", "Result"],
-        runner.compiler.after_actions.map((item) => [item.title, item.after, item.result])
-      ));
-      for (const item of [...runner.compiler.before_actions, ...runner.compiler.after_actions]) {
-        section.append(linksBlock(item.source_links));
-      }
-      const mappings = runner.compiler.mapping || [];
-      if (mappings.length) {
-        section.append(renderTable(
-          ["From", "To", "Why"],
-          mappings.map((item) => [item.from, item.to, item.reason]),
-          "mapping-table"
-        ));
-        for (const item of mappings) section.append(linksBlock(item.source_links));
-      }
-      container.append(section);
-      renderExperiments(runner, container);
-    }
-
-    function renderPass(runner, container) {
-      const section = node("section", "panel");
-      section.id = "pass-lab";
-      section.dataset.featureId = "pass-lab";
-      section.append(
-        node("h4", "", "Applicable pass pipeline"),
-        fact("Pipeline input", runner.pass.cumulative_before),
-        fact("Cumulative output", runner.pass.cumulative_after)
-      );
-      const rows = runner.pass.applicable_passes.map((pass) => [
-        pass.title,
-        pass.traversal,
-        pass.predicate,
-        pass.applicability,
-        pass.optimization,
-        pass.outcome
-      ]);
-      section.append(renderTable(["Pass", "Traversal", "Predicate", "Why applicable", "Optimizes", "Outcome"], rows));
-      for (const pass of runner.pass.applicable_passes) section.append(linksBlock(pass.source_links));
-      for (const table of runner.pass.additional_context_tables) {
-        section.append(node("h4", "", table.title), renderTable(table.columns, table.rows), linksBlock(table.source_links));
-      }
-      container.append(section);
-      renderExperiments(runner, container);
-    }
-
-    function renderOperatorTree(root, activeId = "") {
-      const tree = node("div", "tree");
-      const list = node("ul");
-      function visit(operator) {
-        const item = node("li");
-        const card = node("article", `tree-node${operator.operator_id === activeId ? " active" : ""}`);
-        card.append(
-          node("code", "", `${operator.operator_id} · node ${operator.node_id}`),
-          node("h4", "", operator.name),
-          node("p", "", operator.details),
-          fact("Input schema", operator.input_schema.map((field) => `${field.name}:${field.type}${field.nullable ? "?" : ""}`).join(", ")),
-          fact("Output schema", operator.output_schema.map((field) => `${field.name}:${field.type}${field.nullable ? "?" : ""}`).join(", ")),
-          fact("Key indexes", operator.key_indexes.join(", ") || "None"),
-          fact("Execution eligibility", operator.execution_eligibility),
-          fact("Rust eligibility", operator.rust_eligibility),
-          fact("Target scope", operator.target_scope),
-          fact(
-            "Remote query metadata",
-            operator.remote_metadata.applicable
-              ? `${operator.remote_metadata.cluster} / ${operator.remote_metadata.database} / ${operator.remote_metadata.endpoint}`
-              : operator.remote_metadata.reason
-          ),
-          linksBlock(operator.source_links)
-        );
-        item.append(card);
-        if (operator.children.length) {
-          const children = node("ul");
-          for (const child of operator.children) children.append(visit(child));
-          item.append(children);
-        }
-        return item;
-      }
-      list.append(visit(root));
-      tree.append(list);
-      return tree;
-    }
-
-    function renderPhysical(runner, container) {
-      const section = node("section", "panel");
-      section.id = "physical-lab";
-      section.dataset.featureId = "physical-lab";
-      const contract = node("details", "input-contract");
-      contract.open = false;
-      const contractBody = node("div", "details-body");
-      contractBody.append(renderTable(
-        ["Field", "Type", "Nullable", "Description"],
-        runner.physical.input_contract.fields.map((field) => [
-          field.name,
-          field.type,
-          field.nullable ? "yes" : "no",
-          field.description
-        ])
-      ), linksBlock(runner.physical.input_contract.source_links));
-      contract.append(node("summary", "", runner.physical.input_contract.title), contractBody);
-      section.append(node("h4", "", "Physical action lab"), contract);
-
-      const deepDive = node("details", "deep-dive");
-      deepDive.id = "physical-deep-dive";
-      deepDive.dataset.featureId = "physical-deep-dive";
-      const planLabel = runner.physical.full_plan.complete
-        ? "Full physical plan"
-        : "ESTIMATED physical plan coverage · completeness not claimed";
-      deepDive.append(node("summary", "", `${planLabel} · ${runner.physical.full_plan.operator_count} operators`));
-      const body = node("div", "details-body");
-      for (const root of runner.physical.full_plan.roots) body.append(renderOperatorTree(root));
-      body.append(renderTable(
-        ["Logical", "Physical operators", "Reason"],
-        runner.physical.logical_to_physical.map((item) => [
-          item.logical_id,
-          item.physical_operator_ids.join(", "),
-          item.reason
-        ])
-      ));
-      for (const mapping of runner.physical.logical_to_physical) {
-        body.append(linksBlock(mapping.source_links));
-      }
-      const rawSections = runner.physical.raw_plan_sections || [];
-      if (rawSections.length) {
-        for (const raw of rawSections) {
-          const panel = node("section", "panel");
-          panel.append(node("h4", "", raw.title), node("pre", "", raw.content), linksBlock(raw.source_links));
-          body.append(panel);
-        }
-      }
-      deepDive.append(body);
-      section.append(deepDive);
-      container.append(section);
-      renderExperiments(runner, container);
-    }
-
-    function renderBoundary(runner, container) {
-      const section = node("section", "panel");
-      section.id = "boundary-lab";
-      section.dataset.featureId = "boundary-lab";
-      section.append(node("h4", "", "Managed → JSON → UTF-8 → native lanes"));
-      const lanes = node("div", "lane-grid");
-      for (const lane of runner.boundary.lanes) {
-        const card = node("article", "lane");
-        card.append(
-          node("span", "language", lane.title),
-          node("span", "state", ` ${lane.id}`),
-          node("pre", "", `Input\n${lane.input}\n\nOutput\n${lane.output}`),
-          linksBlock(lane.source_links)
-        );
-        lanes.append(card);
-      }
-      section.append(lanes, node("h4", "", "Object, JSON, and byte representations"));
-      const representations = node("div", "lane-grid");
-      for (const name of ["object", "json", "bytes"]) {
-        const representation = runner.boundary.representations[name];
-        const card = node("article", "lane");
-        card.append(node("h4", "", representation.label), node("pre", "", representation.content), linksBlock(representation.source_links));
-        representations.append(card);
-      }
-      section.append(representations, node("h4", "", "Selectable node byte ranges"));
-      const ranges = node("div");
-      const selected = node("div", "experiment-result", "Select a node or view.");
-      for (const range of runner.boundary.node_byte_ranges) {
-        const button = node("button", "control-button node-range-button", range.node_id);
-        button.type = "button";
-        button.addEventListener("click", () => {
-          selected.textContent = `${range.node_id}: bytes ${range.start}-${range.end} · ${range.description}`;
-          updateNetwork("LOCAL", "In-memory boundary view", `Inspect ${range.node_id}`);
-        });
-        ranges.append(button, linksBlock(range.source_links));
-      }
-      section.append(ranges, selected, node("h4", "", "Selectable views"));
-      for (const view of runner.boundary.selectable_views) {
-        const button = node("button", "control-button node-range-button", view.title);
-        button.type = "button";
-        button.addEventListener("click", () => { selected.textContent = view.content; });
-        section.append(button, linksBlock(view.source_links));
-      }
-      section.append(node("h4", "", "Context comparisons"));
-      for (const comparison of runner.boundary.context_toggle_comparisons) {
-        const button = node("button", "control-button", comparison.title);
-        button.type = "button";
-        button.addEventListener("click", () => {
-          selected.textContent = `Without context: ${comparison.without_context}\nWith context: ${comparison.with_context}`;
-        });
-        section.append(button, linksBlock(comparison.source_links));
-      }
-      section.append(node("h4", "", "Failure injection"));
-      for (const failure of runner.boundary.failure_injections) {
-        const button = node("button", "control-button", failure.title);
-        button.type = "button";
-        button.addEventListener("click", () => {
-          selected.textContent = `Injection: ${failure.injection}\nExpected result: ${failure.expected_failure}`;
-        });
-        section.append(button, linksBlock(failure.source_links));
-      }
-      section.append(node("h4", "", "Debugger map"));
-      section.append(renderTable(
-        ["Boundary", "Managed breakpoint", "Native breakpoint"],
-        runner.boundary.debugger_map.map((item) => [
-          item.boundary_id,
-          item.managed_location,
-          item.native_location
-        ])
-      ));
-      for (const item of runner.boundary.debugger_map) section.append(linksBlock(item.source_links));
-      container.append(section);
-      renderExperiments(runner, container);
-    }
-
-    function renderExecute(runner, container) {
-      const section = node("section", "panel");
-      section.id = "execute-lab";
-      section.dataset.featureId = "execute-lab";
-      section.append(node("h4", "", "User-driven execution event"));
-      const component = runner.execute.components[0];
-      const direction = node("div", "direction-flow");
-      direction.append(
-        node("span", "", `Pull: ${component.pull_direction}`),
-        node("span", "", `Data: ${component.data_direction}`),
-        node("span", "", `Owner: ${component.ownership}`),
-        node("span", "", `Breakpoint: ${component.breakpoint}`)
-      );
-      section.append(direction);
-      section.append(renderTable(
-        ["Event", "What", "Why", "Stack effect", "Heap/lifetime effect"],
-        runner.execute.action_timeline.map((event) => [
-          event.title,
-          event.what,
-          event.why,
-          event.stack_effect,
-          event.heap_effect
-        ])
-      ));
-      for (const event of runner.execute.action_timeline) section.append(linksBlock(event.source_links));
-      section.append(node("h4", "", "Applicable language lanes"));
-      section.append(renderTable(
-        ["Language", "Role", "Why applicable"],
-        runner.execute.language_lanes.map((lane) => [
-          lane.language,
-          lane.role,
-          lane.applicability
-        ])
-      ));
-      for (const lane of runner.execute.language_lanes) section.append(linksBlock(lane.source_links));
-
-      const stackHeap = node("div", "stack-heap");
-      const stack = node("section", "panel");
-      stack.id = "conceptual-call-stack";
-      stack.dataset.featureId = "conceptual-call-stack";
-      stack.append(node("h4", "", "Conceptual mixed-language stack · top first"));
-      const stackList = node("div", "stack-list");
-      for (const frame of runner.execute.call_stack) {
-        const card = node("article", "stack-frame");
-        card.append(
-          node("span", "language", `${frame.position} · ${frame.language}`),
-          node("p", "", frame.frame),
-          node("p", "", frame.what),
-          node("p", "muted", frame.why),
-          linksBlock(frame.source_links)
-        );
-        stackList.append(card);
-      }
-      stack.append(stackList);
-
-      const heap = node("section", "panel");
-      heap.id = "heap-lifetime-zones";
-      heap.dataset.featureId = "heap-lifetime-zones";
-      heap.append(node("h4", "", "Heap and query-lifetime zones"));
-      const heapList = node("div", "heap-list");
-      for (const zone of runner.execute.heap_zones) {
-        const card = node("article", "heap-zone");
-        card.append(
-          node("span", "language", zone.language),
-          node("span", "state", ` ${zone.state}`),
-          node("h4", "", zone.id),
-          node("p", "", zone.what),
-          node("p", "muted", `${zone.why} Owner: ${zone.owner}`),
-          linksBlock(zone.source_links)
-        );
-        heapList.append(card);
-      }
-      heap.append(heapList);
-      stackHeap.append(stack, heap);
-      section.append(stackHeap);
-
-      const components = node("section", "panel");
-      components.id = "runtime-components";
-      components.dataset.featureId = "runtime-components";
-      components.append(node("h4", "", "Runtime components below stack and heap"));
-      const componentList = node("div", "component-list");
-      for (const component of runner.execute.components) {
-        const card = node("article", "component");
-        card.append(node("span", "state", component.state), node("h4", "", component.name), node("p", "", component.role));
-        const facts = node("dl");
-        for (const [label, value] of [
-          ["Evidence ref", component.evidence_ref],
-          ["Pull direction", component.pull_direction],
-          ["Data direction", component.data_direction],
-          ["Ownership now", component.ownership],
-          ["Next breakpoint", component.breakpoint]
-        ]) facts.append(node("dt", "", label), node("dd", "", value));
-        card.append(facts, linksBlock(component.source_links));
-        componentList.append(card);
-      }
-      components.append(componentList);
-      section.append(components);
-
-      const scenarios = node("section", "panel");
-      scenarios.append(node("h4", "", "Query-specific failure, cancellation, memory, and lifetime scenarios"));
-      const list = node("div", "scenario-list");
-      for (const scenario of runner.execute.scenarios) {
-        const card = node("article", "scenario");
-        card.append(
-          node("span", "badge", scenario.type),
-          node("h4", "", scenario.type),
-          node("p", "", scenario.trigger),
-          node("p", "", scenario.behavior),
-          node("p", "muted", `Ownership effect: ${scenario.ownership_effect}`),
-          linksBlock(scenario.source_links)
-        );
-        list.append(card);
-      }
-      scenarios.append(list);
-      section.append(scenarios);
-      container.append(section);
-      renderExperiments(runner, container);
-    }
-
-    function renderNoOp(runner, container) {
-      if (!runner.no_op.enabled) return;
-      const panel = node("section", "callout");
-      panel.append(node("h4", "", "No-op evidence gates"));
-      for (const gate of runner.no_op.gates) panel.append(fact("Gate", gate));
-      for (const reason of runner.no_op.reasons) panel.append(fact("Reason", reason));
-      container.append(panel);
-    }
-
-    function renderSpecialized(runner) {
-      const container = byId("runner-specialized");
-      clear(container);
-      renderNoOp(runner, container);
-      const handlers = {
-        compiler: renderCompiler,
-        pass: renderPass,
-        physical: renderPhysical,
-        boundary: renderBoundary,
-        execute: renderExecute
-      };
-      handlers[runner.type](runner, container);
-    }
-
-    function renderRunner(substep) {
-      const runner = substep.runner;
-      state.runner = clamp(state.runner, 0, runner.snapshots.length - 1);
-      byId("runner-kind").textContent = `${runner.type} runner`;
-      byId("runner-heading").textContent = runner.title;
-      byId("runner-reset").textContent = runner.type === "pass" ? "Reset pipeline" : "Reset";
-      byId("runner-apply").textContent =
-        runner.type === "boundary" ? "Play" : runner.type === "execute" ? "Execute" : "Apply";
-      appendLinks(byId("runner-links"), runner.source_links);
-      const rail = byId("runner-action-rail");
-      clear(rail);
-      runner.actions.forEach((action, index) => {
-        rail.append(railButton(
-          `Action ${index + 1}`,
-          action.title,
-          index === clamp(state.runner, 0, runner.actions.length - 1),
-          () => { state.runner = clamp(index, 0, runner.snapshots.length - 1); renderRunnerAction(runner); },
-          [action.evidence_kind]
-        ));
-      });
-      renderRunnerAction(runner);
-      renderSpecialized(runner);
-    }
-
-    function renderAdditionalContext(stage) {
-      const section = byId("additional-context");
-      const body = byId("additional-context-body");
-      clear(body);
-      const contexts = stage.additional_context || null;
-      section.hidden = !contexts;
-      if (!contexts) return;
-      body.append(node("p", "", contexts.summary));
-      for (const context of contexts.tables) {
-        const panel = node("section", "panel");
-        panel.append(node("h4", "", context.title));
-        if (context.rows.length) {
-          panel.append(renderTable(context.columns, context.rows));
-        }
-        panel.append(linksBlock(context.source_links));
-        body.append(panel);
-      }
-    }
-
-    function renderSubstep() {
-      const stage = currentStage();
-      const substep = currentSubstep();
-      renderSubstepRail(stage);
-      renderSubstepDetail(substep);
-      renderTraversal(substep);
-      renderArtifact(substep);
-      renderRunner(substep);
-      renderAdditionalContext(stage);
-    }
-
-    function selectStage(index) {
-      stopTraversal();
-      state.stage = clamp(index, 0, model.stages.length - 1);
-      state.substep = 0;
-      state.traversal = 0;
-      state.runner = 0;
-      renderStage();
-    }
-
-    function renderStage() {
-      const stage = currentStage();
-      byId("stage-number").textContent = `Phase ${stage.order} of ${model.stages.length}`;
-      byId("stage-title").textContent = stage.title;
-      byId("stage-summary").textContent = `${stage.overview.input} → ${stage.overview.output}`;
-      byId("stage-badge").textContent = stage.evidence_kind;
-      byId("stage-badge").className = badgeClass(stage.evidence_kind);
-      [...byId("stage-nav").children].forEach((button, index) => button.setAttribute("aria-selected", String(index === state.stage)));
-      renderOverview(stage);
-      renderSubstep();
-    }
-
-    function changeRunner(delta) {
-      state.runner = clamp(state.runner + delta, 0, runnerSnapshots().length - 1);
-      renderRunnerAction(currentRunner());
-    }
-
-    function bindControls() {
-      byId("stage-overview-toggle").addEventListener("click", () => {
-        const body = byId("stage-overview-body");
-        setCollapsed(byId("stage-overview-toggle"), body, !body.hidden, "Expand overview", "Collapse overview");
-      });
-      byId("substep-prev").addEventListener("click", () => selectSubstep(state.substep - 1));
-      byId("substep-next").addEventListener("click", () => selectSubstep(state.substep + 1));
-      byId("substep-slider").addEventListener("input", (event) => selectSubstep(Number(event.target.value)));
-      byId("traversal-prev").addEventListener("click", () => { state.traversal -= 1; renderTraversal(currentSubstep()); });
-      byId("traversal-next").addEventListener("click", () => { state.traversal += 1; renderTraversal(currentSubstep()); });
-      byId("traversal-slider").addEventListener("input", (event) => { state.traversal = Number(event.target.value); renderTraversal(currentSubstep()); });
-      byId("traversal-play").addEventListener("click", toggleTraversal);
-      byId("runner-reset").addEventListener("click", () => { state.runner = 0; renderRunnerAction(currentRunner()); });
-      byId("runner-prev").addEventListener("click", () => changeRunner(-1));
-      byId("runner-next").addEventListener("click", () => changeRunner(1));
-      byId("runner-apply").addEventListener("click", () => changeRunner(1));
-      byId("runner-slider").addEventListener("input", (event) => { state.runner = Number(event.target.value); renderRunnerAction(currentRunner()); });
-      byId("stage-nav").addEventListener("keydown", (event) => {
-        if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-          event.preventDefault();
-          selectStage(state.stage + (event.key === "ArrowRight" ? 1 : -1));
-          byId("stage-nav").children[state.stage].focus();
-        }
-      });
-      byId("substep-rail").addEventListener("keydown", (event) => {
-        if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-          event.preventDefault();
-          selectSubstep(state.substep + (event.key === "ArrowRight" ? 1 : -1));
-          byId("substep-rail").children[state.substep].focus();
-        }
-      });
-    }
-
-    byId("cluster").textContent = model.query.cluster_uri;
-    byId("database").textContent = model.query.database;
-    byId("commit").textContent = model.source.workspace_head;
-    byId("query-text").textContent = model.query.text;
-    byId("evidence-mode").classList.toggle("estimated", model.evidence_mode === "ESTIMATED");
-    if (model.evidence_mode === "ESTIMATED") {
-      byId("estimate-reason").hidden = false;
-      byId("estimate-reason").textContent = `ESTIMATED: ${model.estimate_reason}`;
-    }
-    updateNetwork(model.network_beacon.state, model.network_beacon.route, model.network_beacon.purpose);
-    model.stages.forEach((stage, index) => {
-      byId("stage-nav").append(railButton(`Phase ${stage.order}`, stage.title, index === 0, () => selectStage(index), [stage.evidence_kind]));
-    });
-    bindControls();
-    renderStage();
-    window.walkthroughApp = Object.freeze({
-      featureIds: FEATURE_IDS,
-      snapshot: () => ({ ...state, playTimer: Boolean(state.playTimer) }),
-      selectStage,
-      selectSubstep,
-      changeRunner
-    });
-    if (window.location.hash === "#smoke") {
-      const before = JSON.stringify(window.walkthroughApp.snapshot());
-      const expectedLab = {
-        compiler: "compiler-lab",
-        pass: "pass-lab",
-        physical: "physical-lab",
-        boundary: "boundary-lab",
-        execute: "execute-lab"
-      };
-      const visited = [];
-      let failure = "";
-      try {
-        model.stages.forEach((stage, stageIndex) => {
-          selectStage(stageIndex);
-          stage.substeps.forEach((substep, substepIndex) => {
-            selectSubstep(substepIndex);
-            const runner = substep.runner;
-            const expected = expectedLab[runner.type];
-            if (!expected || !byId(expected)) throw new Error(`Missing rendered ${runner.type} lab.`);
-            const initial = JSON.stringify(window.walkthroughApp.snapshot());
-            changeRunner(1);
-            const changed = JSON.stringify(window.walkthroughApp.snapshot());
-            if (runner.snapshots.length > 1 && initial === changed) {
-              throw new Error(`Runner state did not change for ${stage.id}/${substep.id}.`);
-            }
-            visited.push(`${stage.id}/${substep.id}:${runner.type}`);
-          });
-        });
-      } catch (error) {
-        failure = error instanceof Error ? error.message : String(error);
-      }
-      const after = JSON.stringify(window.walkthroughApp.snapshot());
-      const passed = !failure && visited.length >= model.stages.length && before !== after;
-      const result = node("output", "", passed
-        ? `PASS: interactive state changed across ${visited.length} substeps`
-        : `FAIL: ${failure || "interactive state did not change"}`);
-      result.id = "browser-smoke-result";
-      result.dataset.before = before;
-      result.dataset.after = after;
-      result.dataset.visited = visited.join(",");
-      document.body.append(result);
-    }
-  </script>
+<aside id="network-beacon" class="network-beacon none" data-feature-id="network-beacon" aria-live="polite" aria-label="Outbound HTTP status"><div class="network-top"><span class="network-label">Outbound HTTP</span><span id="network-state" class="network-state">No HTTP</span></div><p id="network-route" class="network-route">Local process only</p><p id="network-purpose" class="network-purpose">This substep performs in-memory parsing, analysis, planning, or native calls only.</p></aside>
+<div class="shell">
+<header class="top-header card"><div><h1>__DOCUMENT_TITLE__</h1><p class="muted">A query-specific, source-grounded journey from syntax through execution.</p></div><div class="level-key"><b>Level 1</b><span>Lifecycle stage</span><b>Level 2</b><span>Substep and evidence</span><b>Mode</b><span id="evidence-mode">__EVIDENCE_MODE__</span></div></header>
+<section class="level-one" aria-labelledby="level-one-heading"><div class="section-head"><h2 id="level-one-heading">Query lifecycle</h2><b id="journey-progress">Stage 1 of 10</b></div><nav id="stage-strip" data-feature-id="stage-navigation" aria-label="Query lifecycle stages"></nav></section>
+<main id="workspace" class="workspace">
+<aside class="card stage-overview" data-feature-id="stage-overview"><div class="stage-overview-header"><div><span id="stage-badge" class="badge"></span><span id="stage-compact" class="stage-compact">S1</span></div><button id="stage-toggle" class="stage-toggle" data-feature-id="stage-overview-toggle" type="button" aria-expanded="true" aria-controls="stage-overview-body" title="Collapse stage overview">−</button></div><div id="stage-overview-body"><h2 id="stage-title"></h2><p id="stage-purpose"></p><div id="stage-overview-grid" class="ownership" data-feature-id="stage-overview-grid"><div><b>Input</b><span id="stage-input"></span></div><div><b>Output</b><span id="stage-output"></span></div><div><b>Owner</b><span id="stage-owner"></span></div><div><b>Not responsible</b><span id="stage-not"></span></div></div><div class="handoff"><b>Handoff</b><span id="stage-handoff"></span></div><p id="stage-no-op" class="callout" hidden></p><div id="stage-links" class="links"></div><div class="stage-nav"><button id="previous-stage" type="button">Previous stage</button><button id="next-stage" type="button">Next stage</button></div></div></aside>
+<section class="center">
+<section class="card level-two" aria-labelledby="level-two-heading"><div class="section-head"><h2 id="level-two-heading">Substeps in this stage</h2><span>Use buttons, slider, or ←/→ keys</span></div><nav id="substep-strip" data-feature-id="substep-rail" aria-label="Steps inside selected stage"></nav><div class="walk-controls"><button id="previous-step" data-feature-id="substep-prev" type="button">Previous substep</button><input id="step-slider" data-feature-id="substep-slider" type="range" min="0" value="0" aria-label="Selected substep"><button id="next-step" data-feature-id="substep-next" type="button">Next substep</button></div></section>
+<section id="compiler-lab" class="compiler-lab" data-feature-id="compiler-lab"><div class="lab-head"><h2 id="compiler-heading"></h2><span id="compiler-badge" class="state-pill"></span></div><p id="compiler-intro"></p><div class="lab-controls"><button id="compiler-reset">Reset</button><button id="compiler-previous">Previous</button><button id="compiler-next">Next</button><button id="compiler-apply">Apply action 1</button></div><nav id="compiler-rail" class="chip-rail" aria-label="Compiler actions"></nav><input id="compiler-slider" type="range" min="0" value="0" aria-label="Compiler action"><p id="compiler-progress"></p><div id="compiler-action"></div><div class="state-grid"><section class="state-panel"><h3 id="compiler-before-heading"></h3><pre id="compiler-before" class="compiler-state"></pre></section><section class="state-panel"><h3 id="compiler-after-heading"></h3><pre id="compiler-after" class="compiler-state"></pre></section></div><section class="experiment"><h3 id="compiler-experiment-heading"></h3><div id="compiler-options" class="button-row"></div><div id="compiler-result"></div><div id="compiler-mapping-grid"></div></section></section>
+<section id="physical-lab" class="physical-lab" data-feature-id="physical-lab"><div class="lab-head"><h2 id="physical-heading"></h2><span id="physical-badge" class="state-pill"></span></div><p id="physical-intro"></p><div class="lab-controls"><button id="physical-reset">Reset</button><button id="physical-previous">Previous</button><button id="physical-next">Next</button><button id="physical-apply">Apply action 1</button></div><nav id="physical-rail" class="chip-rail" aria-label="Physical actions"></nav><input id="physical-slider" type="range" min="0" value="0" aria-label="Physical action"><p id="physical-progress"></p><details class="input-contract"><summary id="physical-contract-label">Input contract</summary><div id="physical-contract" class="details-body"></div></details><div class="state-grid"><section class="state-panel"><h3>Before selected action</h3><pre id="physical-before"></pre></section><section class="state-panel"><h3 id="physical-after-heading">After selected action</h3><pre id="physical-after"></pre></section></div></section>
+<section id="boundary-lab" class="boundary-lab" data-feature-id="boundary-lab"><div class="lab-head"><h2 id="boundary-heading"></h2><span id="boundary-badge" class="state-pill"></span></div><p id="boundary-intro"></p><div class="lab-controls"><button id="boundary-reset">Reset</button><button id="boundary-previous">Previous</button><button id="boundary-next">Next</button><button id="boundary-play">Play</button></div><nav id="boundary-rail" class="chip-rail" aria-label="Boundary actions"></nav><p id="boundary-status"></p><div id="boundary-lanes" class="boundary-lanes"></div><div class="boundary-workspace"><section class="boundary-panel"><h3 id="boundary-primary-heading"></h3><div id="boundary-primary"></div><a id="boundary-primary-source" target="_blank" rel="noreferrer"></a></section><section class="boundary-panel"><h3>Inspect and compare</h3><div id="boundary-secondary"></div><a id="boundary-secondary-source" target="_blank" rel="noreferrer"></a></section></div><nav id="boundary-supporting-sources" class="links" aria-label="Boundary source evidence"></nav></section>
+<section id="execution-lab" class="execution-lab" data-feature-id="execute-lab"><div class="lab-head"><h2 id="execution-heading"></h2><span id="execution-badge" class="state-pill"></span></div><p id="execution-intro"></p><div class="lab-controls"><button id="execution-reset">Reset</button><button id="execution-previous">Previous</button><button id="execution-next">Next</button><button id="execution-apply">Execute this event</button></div><nav id="execution-rail" class="chip-rail" aria-label="Runtime events"></nav><input id="execution-slider" type="range" min="0" value="0" aria-label="Execution event"><div id="execution-lanes" class="execution-lanes"></div><div id="execution-action"></div><p id="execution-progress"></p><div class="execution-runtime-grid"><section id = "conceptual-call-stack" class="execution-stack" data-feature-id="conceptual-call-stack"><h3>Active call stack</h3><span id="stack-depth"></span><div id="stack-list"></div></section><section id = "heap-lifetime-zones" class="execution-heap" data-feature-id="heap-lifetime-zones"><h3>Heap and live query state</h3><span id="heap-count"></span><div id="heap-list"></div></section></div><section id = "runtime-components" data-feature-id="runtime-components"><h3>Runtime components below stack and heap</h3><div id="execution-components" class="execution-components"></div></section><section class="experiment"><h3 id="scenario-heading"></h3><div id="scenario-buttons" class="button-row"></div><div id="scenario-output"></div></section><div class="execution-ownership"><div class="fact"><strong>Pull direction</strong><span id="pull-direction"></span></div><div class="fact"><strong>Ownership now</strong><span id="ownership-now"></span></div><div class="fact"><strong>Next breakpoint</strong><span id="next-breakpoint"></span></div></div></section>
+<article class="card step-detail" data-feature-id="substep-detail"><div class="section-head"><div><span id="step-badge" class="eyebrow"></span><h2 id="step-title"></h2><p id="step-summary"></p></div><span id="step-count"></span></div><div class="detail-grid"><section class="fact"><h3>What happens now</h3><p id="step-action"></p></section><section class="fact"><h3>Why this exists</h3><p id="step-why"></p></section><section class="fact"><h3>What to inspect while debugging</h3><p id="step-observe"></p></section><section class="fact"><h3>What comes next</h3><p id="step-next"></p></section></div><div id="step-links" class="links"></div><section id="additional-context" hidden><h3>Additional context</h3><div id="additional-context-body"></div></section><section id="optimization-additional-context" class="additional-context" data-feature-id="additional-context"><h2>Generic optimization schedule</h2><div class="context-table-wrap"><table class="context-table"><thead><tr><th>Pass</th><th>Optimizes</th><th>Source</th></tr></thead><tbody id="optimization-rows"></tbody></table></div><section id="pass-lab" class="pass-lab" data-feature-id="pass-lab"><div class="pass-lab-head"><h2 id="pass-heading"></h2><p id="pass-intro"></p><p>The marks are derived from rule matching against the illustrated tree at the pinned commit. These labs cover source-defined Pass&lt;T&gt; schedules; compiler methods remain in the traversal panel.</p><span id="pass-mark" class="pass-mark"></span></div><div class="lab-controls"><button id="pass-reset">Reset pipeline</button><button id="pass-previous">Previous</button><button id="pass-next">Next</button><button id="pass-apply">Apply pass 1</button></div><nav id="pass-rail" class="chip-rail" aria-label="Passes"></nav><input id="pass-slider" type="range" min="0" value="0" aria-label="Selected pass"><p id="pass-progress"></p><h3 id="pass-title"></h3><p id="pass-explanation"></p><p id="pass-optimizes"></p><div class="pass-tree-grid"><section class="pass-tree-panel"><h3>Before</h3><pre id="pass-before"></pre></section><section class="pass-tree-panel"><h3>After</h3><pre id="pass-after"></pre></section></div><p id="pass-walk-status"></p><div class="lab-controls"><button id="pass-node-previous">Previous node</button><input id="pass-node-slider" type="range" min="0" value="0" aria-label="Pass tree node"><button id="pass-node-next">Next node</button></div><p id="pass-rule"></p><details id="physical-plan-deep-dive" data-feature-id="physical-deep-dive" hidden><summary>Expand the full physical plan</summary><div id="physical-deep-body" class="details-body"></div></details></section></section></article>
+<article class="card call-card"><h2>Method path</h2><div id="call-path" class="call-path"></div></article>
+<article class="card traversal-card" data-feature-id="traversal-lab"><div class="lab-head"><div><h2>How the tree is traversed here</h2><p id="traversal-summary"></p></div><span id="traversal-mode" class="state-pill"></span></div><div><span id="substep-walk" class="walk"></span> <span id="substep-change" class="change"></span><p id="substep-tree-detail"></p></div><div class="walk-layout"><div id="walk-tree" class="walk-tree"></div><div><div id="traversal-current" class="traversal-fact"></div><div id="traversal-movement" class="traversal-fact"></div><div id="traversal-return" class="traversal-fact"></div><div id="traversal-next" class="traversal-fact"></div><div class="traversal-controls"><button id="traversal-previous" data-feature-id="traversal-prev">←</button><button id="traversal-play" data-feature-id="traversal-play">▶</button><input id="traversal-slider" data-feature-id="traversal-slider" type="range" min="0" value="0" aria-label="Traversal position"><button id="traversal-next-button" data-feature-id="traversal-next">→</button></div></div></div></article>
+</section>
+<aside class="card artifact-card" data-feature-id="artifact-panel"><div class="artifact-card-header"><h2 id="artifact-title">Before/after artifact</h2><button id="artifact-toggle" class="artifact-toggle" aria-expanded="true" aria-controls="artifact-body" title="Collapse artifact card">−</button></div><div id="artifact-body"><p id="artifact-status"></p><h3>Before</h3><pre id="artifact-before"></pre><div class="artifact-arrow">↓</div><h3>After this substep</h3><pre id="artifact-after"></pre><div id="artifact-operators"></div><details class="example"><summary>Running query</summary><pre id="query-text"></pre></details><dl><dt>Cluster</dt><dd id="cluster"></dd><dt>Database</dt><dd id="database"></dd><dt>Source commit</dt><dd id="commit"></dd></dl><p id="estimate-reason" hidden></p></div></aside>
+</main><footer>Generated locally from validated evidence. The supplied query was never executed.</footer></div>
+<script type="application/json" id="walkthrough-data">__MODEL_JSON__</script>
+<script>
+"use strict";
+const FEATURE_IDS=Object.freeze(["network-beacon","stage-navigation","stage-overview","stage-overview-toggle","stage-overview-grid","substep-rail","substep-prev","substep-slider","substep-next","substep-detail","traversal-lab","traversal-prev","traversal-play","traversal-slider","traversal-next","artifact-panel","runner-lab","runner-reset","runner-prev","runner-next","runner-apply","runner-slider","runner-action-rail","additional-context","compiler-lab","pass-lab","physical-lab","physical-deep-dive","boundary-lab","execute-lab","conceptual-call-stack","heap-lifetime-zones","runtime-components"]);
+const model=JSON.parse(document.getElementById("walkthrough-data").textContent),byId=id=>document.getElementById(id),clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n},clear=n=>n.replaceChildren();
+const state={stage:0,substep:0,traversal:0,traversalTimer:null,passIndex:0,passNodeIndex:0,appliedPassThrough:-1,physicalActionIndex:0,appliedPhysicalActionThrough:-1,compilerActionIndex:0,appliedCompilerActionThrough:-1,compilerExperimentIndex:0,compilerExperimentChoice:"",boundaryActionIndex:0,boundaryView:"object",boundaryTimer:null,boundaryQuizAnswer:"",boundaryFailure:"none",boundaryContextOptions:{timeout:false,crossCluster:true,deferPartialFailures:true,activity:true},executionActionIndex:0,appliedExecutionActionThrough:-1,executionScenarioIndex:0,visitedStages: new Set([0])};
+const currentStage=()=>model.stages[state.stage],currentSubstep=()=>currentStage().substeps[state.substep],currentRunner=()=>currentSubstep().runner||null;
+const preciseLinks=model.stages.map(s=>s.substeps.map(x=>x.source_links[0])),L={},methodTargets={"PassManager.Execute":null,"PassManager.Execute":null},codeReferences={},treeCodeReferences={},treeNodeReferences={};
+model.stages.forEach((s,i)=>s.substeps.forEach((x,j)=>{const p=preciseLinks[i][j];L[`${s.id}.${x.id}`]=p.url;x.method_path.forEach(method=>{const target=method.source_links[0].url;methodTargets[method.name]=target;codeReferences[method.name]=target});[...x.traversal.nodes,...x.artifact.operators].forEach(n=>{treeCodeReferences[n.label]=n.source_links[0]?.url||p.url;treeNodeReferences[n.id]=n.source_links[0]?.url||p.url});if(x.runner)x.runner.actions.forEach(a=>codeReferences[a.title]=a.source_links[0]?.url||p.url)}));
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),treeCodeReferencePattern=new RegExp(`(?<![A-Za-z0-9_])(${Object.keys(treeCodeReferences).sort((a,b)=>b.length-a.length).map(esc).join("|")})(?![A-Za-z0-9_])`,"g"),codeReferencePattern=new RegExp(`(?<![A-Za-z0-9_])(${Object.keys(codeReferences).sort((a,b)=>b.length-a.length).map(esc).join("|")})(?![A-Za-z0-9_])`,"g");
+function codeLocationLabel(link){if(typeof link==="object"){const f=link.path.split("/").pop();return `${f}:${link.start_line}${link.end_line!==link.start_line?`–${link.end_line}`:""} ↗`}const u=new URL(link),f=(u.searchParams.get("path")||"").split("/").pop(),a=u.searchParams.get("line"),b=u.searchParams.get("lineEnd");return `${f}:${a}${b&&b!==a?`–${b}`:""} ↗`}
+function sourceAnchor(link,boundary=false){const a=el("a","",codeLocationLabel(link));a.href=link.url||link;a.target="_blank";a.rel=boundary?"noreferrer":"noopener noreferrer";return a}
+function linksBlock(links,boundary=false){const d=el("div","links");(links||[]).forEach(x=>d.append(sourceAnchor(x,boundary)));return d}function appendLinks(root,links,b=false){clear(root);root.append(...(links||[]).map(x=>sourceAnchor(x,b)))}
+function appendTreeLinkedText(root,text){String(text).split(treeCodeReferencePattern).forEach(p=>{const t=treeCodeReferences[p];if(!t)root.append(document.createTextNode(p));else{const a=el("a","tree-code-link",p);a.href=t;a.target="_blank";a.rel="noopener noreferrer";root.append(a)}})}function renderLinkedTreeBlock(root,text){clear(root);String(text).split("\n").forEach((line,i,all)=>{appendTreeLinkedText(root,line);if(i<all.length-1)root.append(document.createTextNode("\n"))})}
+function scrollChildOnAxis(parent,child,axis){if(!child)return;const start=axis==="x"?"scrollLeft":"scrollTop",size=axis==="x"?"clientWidth":"clientHeight",offset=axis==="x"?"offsetLeft":"offsetTop",childSize=axis==="x"?"offsetWidth":"offsetHeight";parent.scrollTo({[axis==="x"?"left":"top"]:Math.max(0,child[offset]-(parent[size]-child[childSize])/2),behavior:"smooth"})}
+function linkCodeReferences(root){const w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode(n){return !n.nodeValue.trim()||n.parentElement.closest("a, button, code, pre, script, style")?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT}}),nodes=[];while(w.nextNode())nodes.push(w.currentNode);nodes.forEach(n=>{const f=document.createDocumentFragment();String(n.nodeValue).split(codeReferencePattern).forEach(p=>{const t=codeReferences[p];if(!t)f.append(document.createTextNode(p));else{const a=el("a","inline-code-link",p);a.href=t;a.target="_blank";a.rel="noopener noreferrer";f.append(a)}});n.replaceWith(f)})}
+function fact(k,v){const d=el("div","fact");d.append(el("strong","",k),el("span","",v));return d}function renderTable(h,rows){const t=el("table","data-table"),tr=el("tr"),head=el("thead"),body=el("tbody");h.forEach(x=>tr.append(el("th","",x)));head.append(tr);rows.forEach(r=>{const x=el("tr");r.forEach(c=>x.append(el("td","",c)));body.append(x)});t.append(head,body);return t}
+function chip(i,selected,applied,title,fn,cls="action-chip"){const b=el("button",`${cls}${selected?" selected":""}${applied?" applied":""}`,i+1);b.title=`${i+1}. ${title}`;b.addEventListener("click",fn);return b}
+function renderAction(root,a){clear(root);root.append(el("h3","",a.title),el("p","",a.what),fact("Why",a.why),fact("Result",a.result),fact("Stack effect",a.stack_effect),fact("Heap/lifetime effect",a.heap_effect),linksBlock(a.source_links))}const shapes={language:{ids:["script","take10","finalProject","join","localProject","localTake","telemetry","remoteProject","remoteTake","where","trips"],children:[[1],[2],[3],[4,7],[5],[6],[],[8],[9],[10],[]]},relop:{ids:["limiter","projection","innerJoin","leftProjection","leftLimiter","localTable","remoteQuery","rightProjection","rightLimiter","selection","remoteTable"],children:[[1],[2],[3,6],[4],[5],[],[7],[8],[9],[10],[]]},physical:{ids:["topnNode","projectorNode","hashJoinNode","localIterator","remoteNode","remoteKql"],children:[[1],[2],[3,4],[],[5],[]]},execution:{ids:["resultPull","cppJoin","rustJoin","buildPull","probePull","callbackNode","remoteIterator","managedTransport"],children:[[1],[2],[3,4],[],[5],[6],[7],[]]}};
+const traversalLengths=[11,18,20,20,21,14,18,17,10,15],traversalFocuses=[[0,0,5,10],[0,6,10,15,18],[0,3,12,19],[0,5,12,19],[0,9,9,16,20],[0,13,5,10],[0,10,0,14,17],[0,2,8,12,16],[0,5,9],[0,2,3,6,8,14]],traversalModes=["construction order","depth-first visitor","depth-first translation","pass-specific walks","repeated Relop walks","collector traversal","multi-pass traversal","builder visitor","object-graph serialization","pull-based iterator traversal"];
+function traversalDefinition(){const family=state.stage<3?"language":state.stage<8?"relop":state.stage===8?"physical":"execution",shape=shapes[family],length=traversalLengths[state.stage],order=Array.from({length},(_,i)=>shape.ids[i<shape.ids.length?i:shape.ids.length-2-((i-shape.ids.length)%Math.max(1,shape.ids.length-1))]);return{shape,order,mode:traversalModes[state.stage]}}
+function occurrence(order,id,until){return order.slice(0,until+1).filter(x=>x===id).length}function renderWalkNode(i,d){const id=d.shape.ids[i],sources=currentSubstep().traversal.nodes,src=sources[i%sources.length],current=d.order[state.traversal]===id,seen=occurrence(d.order,id,state.traversal-1),visited=!current&&occurrence(d.order,id,state.traversal)>0,row=el("div","walk-node-row"),b=el("button",`walk-node${current?" current":""}${current&&seen?" returning":""}${visited?" visited":""}`);b.dataset.order=d.order.indexOf(id)+1;b.append(el("b","",src.label),el("span","state",src.state));b.addEventListener("click",()=>{const next=d.order.findIndex((x,n)=>n>=state.traversal&&x===id);setTraversal(next>=0?next:d.order.indexOf(id))});const a=sourceAnchor(src.source_links[0]||preciseLinks[state.stage][state.substep]);a.textContent="↗";a.setAttribute("aria-label",`Open source for ${src.label}`);row.append(b,a);return row}
+function renderTraversal(){const d=traversalDefinition();state.traversal=clamp(state.traversal,0,d.order.length-1);const root=byId("walk-tree");clear(root);function branch(i){const li=el("li");li.append(renderWalkNode(i,d));if(d.shape.children[i].length){const ul=el("ul");d.shape.children[i].forEach(c=>ul.append(branch(c)));li.append(ul)}return li}const ul=el("ul");ul.append(branch(0));root.append(ul);const id=d.order[state.traversal],slot=d.shape.ids.indexOf(id),src=currentSubstep().traversal.nodes[slot%currentSubstep().traversal.nodes.length],snap=currentSubstep().traversal.snapshots;byId("traversal-mode").textContent=d.mode;byId("traversal-summary").textContent=currentSubstep().behavior;byId("traversal-current").textContent=`${state.traversal+1}/${d.order.length}: ${src.label}${occurrence(d.order,id,state.traversal-1)?" (return/unwind visit)":" (first entry)"}`;byId("traversal-movement").textContent=`How Visit moves: ${snap[0].movement}`;byId("traversal-return").textContent=`Return / unwind: ${snap.at(-1).return_value}`;byId("traversal-next").textContent=state.traversal===d.order.length-1?"Traversal complete; return the resulting root/artifact.":`Next node: ${d.order[state.traversal+1]}`;const s=byId("traversal-slider");s.max=d.order.length-1;s.value=state.traversal;byId("traversal-previous").disabled=state.traversal===0;byId("traversal-next-button").disabled=state.traversal===d.order.length-1}
+function setTraversal(i){stopTraversal();state.traversal=clamp(i,0,traversalDefinition().order.length-1);renderTraversal()}function stopTraversal(){if(state.traversalTimer)clearInterval(state.traversalTimer);state.traversalTimer=null;byId("traversal-play").textContent="▶"}function toggleTraversal(){if(state.traversalTimer){stopTraversal();return}const max=traversalDefinition().order.length-1;if(state.traversal===max)state.traversal=0;byId("traversal-play").textContent="❚❚";state.traversalTimer=setInterval(()=>{const end=traversalDefinition().order.length-1;if(state.traversal>=end){stopTraversal();renderTraversal();return}state.traversal++;renderTraversal()}, 850);renderTraversal()}
+function resetLabs(){stopBoundaryPlay();Object.assign(state,{passIndex:0,passNodeIndex:0,appliedPassThrough:-1,physicalActionIndex:0,appliedPhysicalActionThrough:-1,compilerActionIndex:0,appliedCompilerActionThrough:-1,compilerExperimentIndex:0,compilerExperimentChoice:"",boundaryActionIndex:0,boundaryView:"object",boundaryQuizAnswer:"",boundaryFailure:"none",executionActionIndex:0,appliedExecutionActionThrough:-1,executionScenarioIndex:0});state.boundaryContextOptions={timeout:false,crossCluster:true,deferPartialFailures:true,activity:true}}
+function renderRail(id,actions,index,applied,fn,cls){const r=byId(id);clear(r);actions.forEach((a,i)=>r.append(chip(i,i===index,i<=applied,a.title,()=>fn(i),cls)));return r}
+function applyLabel(button,index,applied,noun){const next=applied+1;button.disabled=index!==next;button.textContent=index<=applied?"Applied ✓":index===next?`Apply ${noun} ${index+1}`:`Apply ${noun} ${next+1} first`}
+function renderCompiler(){const lab=byId("compiler-lab"),r=currentRunner(),c=r?.type==="compiler"?r:null;lab.className=`compiler-lab${c?` visible ${c.compiler.mode==="csl-to-relop"?"relop":c.compiler.mode}`:""}`;if(!c)return;state.compilerActionIndex=clamp(state.compilerActionIndex,0,c.actions.length-1);const a=c.actions[state.compilerActionIndex],kind=c.compiler.mode==="csl-to-relop"?"relop":c.compiler.mode,heads={syntax:["Parser input before this action","Parser artifact after this action"],semantic:["Binding state before this action","Binding state after this action"],relop:["Logical artifact before this action","Logical artifact after this action"]};byId("compiler-heading").textContent=c.title;byId("compiler-badge").textContent=kind;byId("compiler-intro").textContent=a.what;byId("compiler-before-heading").textContent=heads[kind][0];byId("compiler-after-heading").textContent=heads[kind][1];renderLinkedTreeBlock(byId("compiler-before"),a.before);renderLinkedTreeBlock(byId("compiler-after"),a.after);renderAction(byId("compiler-action"),a);renderRail("compiler-rail",c.actions,state.compilerActionIndex,state.appliedCompilerActionThrough,selectCompilerAction);const s=byId("compiler-slider");s.max=c.actions.length-1;s.value=state.compilerActionIndex;byId("compiler-previous").disabled=state.compilerActionIndex===0;byId("compiler-next").disabled=state.compilerActionIndex===c.actions.length-1;applyLabel(byId("compiler-apply"),state.compilerActionIndex,state.appliedCompilerActionThrough,"action");byId("compiler-progress").textContent=`${state.appliedCompilerActionThrough+1} / ${c.actions.length} actions applied`;const ex=c.experiments[0],opts=byId("compiler-options");clear(opts);ex.options.forEach((o,i)=>{const b=el("button",i===state.compilerExperimentIndex?"selected":"",o.label);b.addEventListener("click",()=>{state.compilerExperimentIndex=i;state.compilerExperimentChoice=o.id;renderCompiler()});opts.append(b)});if(currentSubstep().id==="2-1"){const b=el("button",state.compilerExperimentChoice==="map"?"selected":"","Semantic/CSL → Relop map");b.addEventListener("click",()=>{state.compilerExperimentChoice="map";renderCompiler()});opts.append(b)}byId("compiler-experiment-heading").textContent=ex.title;byId("compiler-result").textContent=ex.results[state.compilerExperimentIndex]?.result||"";const grid=byId("compiler-mapping-grid");clear(grid);const mappingMode={value:state.compilerExperimentChoice};if(currentSubstep().id==="2-1"&&mappingMode.value!=="map")clear(grid);else if(currentSubstep().id==="2-1")c.compiler.mapping.forEach(m=>grid.append(fact(`${m.from} → ${m.to}`,m.reason),linksBlock(m.source_links)))}
+function selectCompilerAction(i){state.compilerActionIndex=clamp(i,0,currentRunner().actions.length-1);renderCompiler()}function applyCompilerAction(){if(state.compilerActionIndex===state.appliedCompilerActionThrough+1)state.appliedCompilerActionThrough=state.compilerActionIndex;renderCompiler()}function resetCompilerLab(){state.compilerActionIndex=0;state.appliedCompilerActionThrough=-1;renderCompiler()}
+function passTokens(a){const x=String(a.before).split("\n").filter(Boolean);return x.length?x:[a.traversal]}function renderPass(){const lab=document.querySelector(".pass-lab"),r=currentRunner(),c=r?.type==="pass"?r:null;lab.classList.toggle("visible",Boolean(c));byId("optimization-additional-context").classList.toggle("visible",currentSubstep().id==="4-0");if(!c){optimizationTableRows().forEach(x=>x.classList.remove("selected"));return}state.passIndex=clamp(state.passIndex,0,c.actions.length-1);const a=c.actions[state.passIndex],p=c.pass.applicable_passes[state.passIndex],tokens=passTokens(a);state.passNodeIndex=clamp(state.passNodeIndex,0,tokens.length-1);const changes=p.outcome==="TRANSFORMED";byId("pass-heading").textContent=c.actions.length===1?"Run this pass yourself":`Run the ${c.actions.length} passes yourself`;byId("pass-intro").textContent=`${c.title}: select a pass, walk its tree visit node by node, then apply it to advance the cumulative tree.`;byId("pass-mark").className=`pass-mark ${changes?"changes":"same"}`;byId("pass-mark").textContent=changes?"CHANGES THIS TREE":"NO STRUCTURAL CHANGE";byId("pass-title").textContent=`${state.passIndex+1}. ${p.title}`;byId("pass-explanation").textContent=changes?"The selected rule changes this query-specific tree.":"The pass runs but leaves this tree unchanged.";byId("pass-optimizes").textContent=p.optimization;renderLinkedTreeBlock(byId("pass-before"),a.before);renderLinkedTreeBlock(byId("pass-after"),a.after);byId("pass-walk-status").textContent=`Tree visit ${state.passNodeIndex+1} / ${tokens.length} — current node: ${tokens[state.passNodeIndex]}`;byId("pass-rule").textContent=`${p.predicate} ${p.applicability}`;const ns=byId("pass-node-slider");ns.max=tokens.length-1;ns.value=state.passNodeIndex;byId("pass-node-previous").disabled=state.passNodeIndex===0;byId("pass-node-next").disabled=state.passNodeIndex===tokens.length-1;const rail=renderRail("pass-rail",c.actions,state.passIndex,state.appliedPassThrough,selectPass,"pass-chip");rail.setAttribute("aria-label",`${c.title} passes`);const s=byId("pass-slider");s.max=c.actions.length-1;s.value=state.passIndex;byId("pass-previous").disabled=state.passIndex===0;byId("pass-next").disabled=state.passIndex===c.actions.length-1;applyLabel(byId("pass-apply"),state.passIndex,state.appliedPassThrough,"pass");byId("pass-progress").textContent=`${state.appliedPassThrough+1} / ${c.actions.length} applied`;const deep=byId("physical-plan-deep-dive");deep.hidden=currentSubstep().id!=="7-4";clear(byId("physical-deep-body"));if(!deep.hidden)byId("physical-deep-body").append(physicalDeepDive(currentStage().substeps[0].runner.physical));optimizationTableRows().forEach((row,i)=>{row.classList.toggle("selected",currentSubstep().id==="4-0"&&i===state.passIndex);if(currentSubstep().id==="4-0"){const status=c.pass.applicable_passes[i],cell=row.cells[3];clear(cell);cell.append(el("span",`pass-mark ${status.outcome==="TRANSFORMED"?"changes":"same"}${i<=state.appliedPassThrough?" applied":""}`,status.outcome==="TRANSFORMED"?"CHANGES":"NO CHANGE"))}})}
+function selectPass(i){state.passIndex=clamp(i,0,currentRunner().actions.length-1);state.passNodeIndex=0;renderPass()}function setPassNode(i){state.passNodeIndex=clamp(i,0,passTokens(currentRunner().actions[state.passIndex]).length-1);renderPass()}function applySelectedPass(){if(state.passIndex===state.appliedPassThrough+1)state.appliedPassThrough=state.passIndex;renderPass()}function resetPassLab(){state.passIndex=0;state.passNodeIndex=0;state.appliedPassThrough=-1;renderPass()}
+function schemaSummary(fields){return fields.map(field=>`${field.name}: ${field.type}${field.nullable?"?":""} — ${field.description}`).join("\n")}
+function operatorForest(roots){const d=el("div","tree");function visit(o){const a=el("article","tree-node");a.dataset.operatorId=o.operator_id;a.append(el("b","",`${o.name} · ${o.operator_id}`),el("p","",o.details),fact("Node ID",o.node_id),fact("Logical operators",o.logical_operator_ids.join(", ")),fact("Key indexes",o.key_indexes.length?o.key_indexes.join(", "):"none"),fact("Execution eligibility",o.execution_eligibility),fact("Rust eligibility",o.rust_eligibility),fact("Target scope",o.target_scope),el("h4","","Input schema"),el("pre","",schemaSummary(o.input_schema)),el("h4","","Output schema"),el("pre","",schemaSummary(o.output_schema)));const remote=o.remote_metadata;a.append(fact("Remote query metadata",remote.applicable?`${remote.cluster} · ${remote.database} · ${remote.endpoint} · ${remote.reason}`:remote.reason),linksBlock(remote.source_links),linksBlock(o.source_links));o.children.forEach(c=>a.append(visit(c)));return a}roots.forEach(r=>d.append(visit(r)));return d}
+function physicalDeepDive(physical){const root=el("div","physical-deep-content"),plan=physical.full_plan;root.append(fact("Plan completeness",plan.complete?"Complete evidence-backed plan":"ESTIMATED plan; completeness is not claimed"),fact("Operator count",String(plan.operator_count)),el("h3","","Complete physical operator tree"),operatorForest(plan.roots),el("h3","","Logical → physical mappings"));physical.logical_to_physical.forEach(mapping=>root.append(fact(mapping.logical_id,`${mapping.physical_operator_ids.join(", ")} — ${mapping.reason}`),linksBlock(mapping.source_links)));const sections=physical.raw_plan_sections||[];if(sections.length){root.append(el("h3","","Sanitized raw plan sections"));sections.forEach(section=>root.append(el("h4","",section.title),fact("SHA-256",section.digest_sha256),el("pre","",section.content),linksBlock(section.source_links)))}return root}
+function renderPhysical(){const lab=byId("physical-lab"),r=currentRunner(),c=r?.type==="physical"?r:null;lab.classList.toggle("visible",Boolean(c));if(!c)return;state.physicalActionIndex=clamp(state.physicalActionIndex,0,c.actions.length-1);const a=c.actions[state.physicalActionIndex],modes=["CONTEXT ASSEMBLY","VISITOR + UNWIND","JOIN ASSEMBLY","REMOTE KQL COMPILATION"];byId("physical-heading").textContent=`Run “${currentSubstep().title}” yourself`;byId("physical-badge").textContent=modes[state.substep];byId("physical-intro").textContent=a.what;byId("physical-contract-label").textContent=c.physical.input_contract.title;const body=byId("physical-contract");clear(body);body.append(renderTable(["Field","Type","Nullable","Description"],c.physical.input_contract.fields.map(f=>[f.name,f.type,f.nullable?"yes":"no",f.description])),linksBlock(c.physical.input_contract.source_links));renderLinkedTreeBlock(byId("physical-before"),a.before);renderLinkedTreeBlock(byId("physical-after"),a.after);renderRail("physical-rail",c.actions,state.physicalActionIndex,state.appliedPhysicalActionThrough,selectPhysicalAction,"action-chip physical-action-chip");const s=byId("physical-slider");s.max=c.actions.length-1;s.value=state.physicalActionIndex;byId("physical-previous").disabled=state.physicalActionIndex===0;byId("physical-next").disabled=state.physicalActionIndex===c.actions.length-1;applyLabel(byId("physical-apply"),state.physicalActionIndex,state.appliedPhysicalActionThrough,"action");byId("physical-progress").textContent=`${state.appliedPhysicalActionThrough+1} / ${c.actions.length} actions applied`}
+function selectPhysicalAction(i){state.physicalActionIndex=clamp(i,0,currentRunner().actions.length-1);renderPhysical()}function applyPhysicalAction(){if(state.physicalActionIndex===state.appliedPhysicalActionThrough+1)state.appliedPhysicalActionThrough=state.physicalActionIndex;renderPhysical()}function resetPhysicalLab(){state.physicalActionIndex=0;state.appliedPhysicalActionThrough=-1;renderPhysical()}
+function utf8Bytes(text){return new TextEncoder().encode(text)}function formatHex(bytes,limit=192){const rows=[],shown=bytes.slice(0,limit);for(let o=0;o<shown.length;o+=16){const c=[...shown.slice(o,o+16)],h=c.map(v=>v.toString(16).padStart(2,"0")).join(" ").padEnd(47),a=c.map(v=>v>=32&&v<=126?String.fromCharCode(v):".").join("");rows.push(`${o.toString(16).padStart(4,"0")}  ${h}  |${a}|`)}if(bytes.length>limit)rows.push(`… ${bytes.length-limit} more bytes`);return rows.join("\n")}
+function collectSourceLinks(value,links=[]){if(Array.isArray(value)){value.forEach(item=>collectSourceLinks(item,links));return links}if(!value||typeof value!=="object")return links;if(Array.isArray(value.source_links))value.source_links.forEach(link=>links.push(link));Object.entries(value).forEach(([key,item])=>{if(key!=="source_links")collectSourceLinks(item,links)});return links}
+function renderBoundarySources(r){const links=collectSourceLinks(r),fallback=currentSubstep().source_links[0];while(links.length<7)links.push(fallback);const selected=links.slice(0,7),primary=byId("boundary-primary-source"),secondary=byId("boundary-secondary-source");[[primary,selected[0]],[secondary,selected[1]]].forEach(([anchor,link])=>{anchor.href=link.url;anchor.textContent=codeLocationLabel(link)});const supporting=byId("boundary-supporting-sources");clear(supporting);selected.slice(2).forEach(link=>supporting.append(sourceAnchor(link,true)))}
+function renderBoundaryLanes(r){const root=byId("boundary-lanes"),selected=r.actions[state.boundaryActionIndex];clear(root);[["C#","C# managed"],["Interop","Interop boundary"],["C++","C++ native"]].forEach(([lane,title])=>{const reached=r.actions.slice(0,state.boundaryActionIndex+1).filter(action=>action.lane===lane),active=selected.lane===lane,card=el("article",`boundary-lane${active?" active":reached.length?" complete":""}`);card.dataset.lane=lane;card.append(el("b","",title),el("p","",reached.at(-1)?.what||(lane==="C#"?"Ready at the managed query-plan boundary.":"Waiting for the payload.")));root.append(card)})}
+function renderBoundaryPlan(r){const runner=r,primary=byId("boundary-primary"),secondary=byId("boundary-secondary"),b=runner.boundary;clear(primary);clear(secondary);const ids=[0,1,2,3,4,6],ranges=runner.boundary.node_byte_ranges,index=clamp(Number(primary.dataset.node||0),0,5),range=ranges[index%ranges.length],picker=el("div","button-row");ids.forEach((id,i)=>{const x=el("button",i===index?"selected":"",`NodeId ${id}`);x.addEventListener("click",()=>{primary.dataset.node=i;renderBoundary()});picker.append(x)});const tabs=el("div","button-row");[["object","C# object"],["json","JSON"],["bytes","UTF-8 bytes"]].forEach(([id,label])=>{const x=el("button",state.boundaryView===id?"selected":"",label);x.addEventListener("click",()=>{state.boundaryView=id;renderBoundary()});tabs.append(x)});const payload={NodeType:currentSubstep().artifact.operators[index%currentSubstep().artifact.operators.length].label,NodeId:ids[index],Range:[range.start,range.end],Description:range.description},json=JSON.stringify(payload,null,2),pre=el("pre","boundary-code");if(state.boundaryView==="object")renderLinkedTreeBlock(pre,`${payload.NodeType} (QueryPlanNode)\n├─ NodeId: ${payload.NodeId}\n└─ ${b.representations.object.content}`);else if(state.boundaryView==="json")renderLinkedTreeBlock(pre,json);else pre.textContent=formatHex(utf8Bytes(json));primary.append(picker,tabs,pre);const grid=el("div","boundary-byte-grid");grid.append(fact("SELECTED EXCERPT",`${utf8Bytes(json).length} bytes`),fact("COMPLETE SAMPLE",`${utf8Bytes(JSON.stringify(b.representations)).length} bytes`),fact("ENCODING","UTF-8"));secondary.append(grid,fact("Position index",`NodeId ${ids[index]} → [${range.start}, ${range.end})`))}
+function buildBoundaryContext(){const x={ClientRequestId:`${model.query.slug};request`,IsCrossClusterQuery:state.boundaryContextOptions.crossCluster};if(state.boundaryContextOptions.timeout)x.ServerTimeout="00:02:00";if(state.boundaryContextOptions.deferPartialFailures)x.DeferPartialQueryFailures=true;if(state.boundaryContextOptions.activity)x.ActivityContext={ActivityId:model.plan.digest_sha256.slice(0,16),ParentActivityId:"root"};return x}
+function renderBoundaryContext(){const p=byId("boundary-primary"),s=byId("boundary-secondary"),b=currentRunner().boundary;clear(p);clear(s);const options=el("div","boundary-toggle-grid");[["timeout","Server timeout","00:02:00"],["crossCluster","Cross-cluster query","true"],["deferPartialFailures","Defer partial failures","true"],["activity","Activity lineage","request-scoped"]].forEach(([key,label,value])=>{const l=el("label","boundary-toggle"),i=el("input");i.type="checkbox";i.checked=state.boundaryContextOptions[key];i.addEventListener("change",()=>{state.boundaryContextOptions[key]=i.checked;renderBoundary()});l.append(i,el("b","",label),document.createTextNode(` · ${value}`));options.append(l)});const context=JSON.stringify(buildBoundaryContext(),null,2),grid=el("div","boundary-byte-grid");grid.append(fact("PLAN BUFFER",`${utf8Bytes(b.representations.json.content).length} bytes`),fact("CONTEXT BUFFER",`${utf8Bytes(context).length} bytes`),fact("PLAN REBUILT?","No"));p.append(options,grid,el("pre","boundary-code",context));const quiz=el("div","button-row");["Plan","Context","Both"].forEach(a=>{const x=el("button",state.boundaryQuizAnswer===a.toLowerCase()?"selected":"",a);x.addEventListener("click",()=>{state.boundaryQuizAnswer=a.toLowerCase();renderBoundary()});quiz.append(x)});const result=!state.boundaryQuizAnswer?"Choose an answer.":state.boundaryQuizAnswer==="context"?"Correct. It is request context, so the operator tree and serialized plan stay unchanged.":"Not quite. The timeout is request-scoped and belongs only to SerializedContext.";s.append(el("h4","","If servertimeout changes, which payload changes?"),quiz,el("p",state.boundaryQuizAnswer==="context"?"correct":state.boundaryQuizAnswer?"incorrect":"",result))}
+function renderBoundaryHandoff(r){const p=byId("boundary-primary"),s=byId("boundary-secondary"),a=r.actions[state.boundaryActionIndex],b=r.boundary;clear(p);clear(s);p.append(el("pre","boundary-code","m_dataEngineQuery.ExecuteQuery(\n  callback,\n  serializedContext,\n  serializedPlan\n);"),fact(`ACTION ${state.boundaryActionIndex+1}`,`${a.title}: ${a.what}`));const failures=[{id:"none",title:"Healthy handoff",text:"ExecuteQuery receives all three arguments; native parsing succeeds."},...b.failure_injections.map(x=>({id:x.id,title:x.title,text:`${x.injection} ${x.expected_failure}`,links:x.source_links}))],rail=el("div","button-row");failures.forEach(f=>{const x=el("button",state.boundaryFailure===f.id?"selected":"",f.title);x.addEventListener("click",()=>{state.boundaryFailure=f.id;renderBoundary()});rail.append(x)});const selected=failures.find(x=>x.id===state.boundaryFailure)||failures[0];s.append(rail,el("p","",selected.text),renderTable(["Boundary","Managed breakpoint","Native breakpoint"],b.debugger_map.map(x=>[x.boundary_id,x.managed_location,x.native_location])))}
+function renderBoundary(){const lab=byId("boundary-lab"),r=currentRunner(),c=r?.type==="boundary"?r:null;lab.classList.toggle("visible",Boolean(c));if(!c)return;state.boundaryActionIndex=clamp(state.boundaryActionIndex,0,c.actions.length-1);const a=c.actions[state.boundaryActionIndex];byId("boundary-heading").textContent=`Run “${currentSubstep().title}” yourself`;byId("boundary-badge").textContent=["PLAN → JSON → UTF-8","REQUEST → CONTEXT BYTES","C# → INTEROP → C++"][state.substep];byId("boundary-intro").textContent=a.what;byId("boundary-status").textContent=`Action ${state.boundaryActionIndex+1} of ${c.actions.length} · ${a.title}`;byId("boundary-primary-heading").textContent=["Node → JSON → bytes explorer","Plan vs. request context experiment","Managed-to-native handoff simulator"][state.substep];byId("boundary-previous").disabled=state.boundaryActionIndex===0;byId("boundary-next").disabled=state.boundaryActionIndex===c.actions.length-1;byId("boundary-play").textContent=state.boundaryTimer?"Pause":state.boundaryActionIndex===c.actions.length-1?"Replay":"Play";renderBoundarySources(c);renderRail("boundary-rail",c.actions,state.boundaryActionIndex,state.boundaryActionIndex-1,i=>{stopBoundaryPlay();state.boundaryActionIndex=i;renderBoundary()});renderBoundaryLanes(c);if(state.substep===0)renderBoundaryPlan(c);else if(state.substep===1)renderBoundaryContext();else renderBoundaryHandoff(c)}
+function stopBoundaryPlay(){if(state.boundaryTimer)clearInterval(state.boundaryTimer);state.boundaryTimer=null}function moveBoundaryAction(d){stopBoundaryPlay();state.boundaryActionIndex=clamp(state.boundaryActionIndex+d,0,currentRunner().actions.length-1);renderBoundary()}function toggleBoundaryPlay(){if(state.boundaryTimer){stopBoundaryPlay();renderBoundary();return}const r=currentRunner();if(state.boundaryActionIndex===r.actions.length-1)state.boundaryActionIndex=0;state.boundaryTimer=setInterval(()=>{if(state.boundaryActionIndex>=r.actions.length-1){stopBoundaryPlay();renderBoundary();return}state.boundaryActionIndex++;renderBoundary()},1100);renderBoundary()}function resetBoundaryLab(){stopBoundaryPlay();state.boundaryActionIndex=0;state.boundaryView="object";state.boundaryQuizAnswer="";state.boundaryFailure="none";state.boundaryContextOptions={timeout:false,crossCluster:true,deferPartialFailures:true,activity:true};renderBoundary()}
+const executionZones=["managed","borrowed","cpp","rust"],executionZoneLabels={managed:"Managed heap / state",borrowed:"Temporary / borrowed views",cpp:"C++ heap / RAII state",rust:"Rust heap / owned state"};
+function executionMemoryAt(c,through){const memory={};executionZones.forEach(zone=>memory[zone]=new Map());c.heap_zones.forEach(item=>memory[item.zone].set(item.id,{id:item.id,title:item.id,detail:item.what,status:item.state,source_links:item.source_links}));c.action_timeline.slice(0,through+1).forEach(action=>action.memory.forEach(event=>{if(event.op==="add")memory[event.zone].set(event.id,{...event,status:"live"});else{const current=memory[event.zone].get(event.id)||{id:event.id};memory[event.zone].set(event.id,{...current,title:event.title,detail:event.detail,status:event.op==="update"?"mutated":"released"})}}));return memory}
+function renderExecutionMemory(c,event){const stack=byId("stack-list");clear(stack);c.call_stack.forEach((frame,index)=>{const card=el("article",`stack-frame ${frame.kind}`);card.dataset.frameKind=frame.kind;card.append(el("b","",`${index===0?"TOP · ":""}${frame.frame}`),el("p","",`${frame.what} ${index===0?event.stack_effect:""}`),linksBlock(frame.source_links));stack.append(card)});byId("stack-depth").textContent=`${c.call_stack.length} conceptual frames · top first`;const memory=executionMemoryAt(c,state.executionActionIndex),root=byId("heap-list");clear(root);let live=0,released=0;executionZones.forEach(zoneId=>{const zone=el("section",`heap-zone ${zoneId}`),items=[...memory[zoneId].values()];zone.dataset.zone=zoneId;zone.append(el("h4","",executionZoneLabels[zoneId]));if(!items.length)zone.append(el("p","","Nothing allocated in this zone yet."));items.forEach(item=>{item.status==="released"?released++:live++;const card=el("article",`heap-object ${item.status}`);card.dataset.memoryId=item.id;card.dataset.memoryState=item.status;card.append(el("strong","",item.title||item.id),el("span","state",item.status),el("p","",item.detail||""),linksBlock(item.source_links||[]));zone.append(card)});root.append(zone)});byId("heap-count").textContent=`${live} live · ${released} released`}
+function renderExecutionComponents(c,event){const root=byId("execution-components");clear(root);c.components.forEach(component=>{const status=component.id===event.active?"active":event.live.includes(component.id)?"waiting":"off",card=el("article",`execution-component ${status}`);card.dataset.componentId=component.id;card.dataset.componentState=status;card.append(el("b","",`${status==="active"?"ACTIVE":status==="waiting"?"LIVE / WAITING":"NOT LIVE"} · ${component.name}`),el("p","",component.role),linksBlock(component.source_links));root.append(card)});return c.components.find(component=>component.id===event.active)}
+function renderExecute(){const lab=byId("execution-lab"),r=currentRunner(),c=r?.type==="execute"?r.execute:null;lab.classList.toggle("visible",Boolean(c));if(!c)return;state.executionActionIndex=clamp(state.executionActionIndex,0,c.action_timeline.length-1);const event=c.action_timeline[state.executionActionIndex],common=r.actions[state.executionActionIndex];byId("execution-heading").textContent=r.title;byId("execution-badge").textContent=`${c.action_timeline.length} RUNTIME EVENTS`;byId("execution-intro").textContent=event.what;renderRail("execution-rail",c.action_timeline,state.executionActionIndex,state.appliedExecutionActionThrough,selectExecutionAction);const slider=byId("execution-slider");slider.max=c.action_timeline.length-1;slider.value=state.executionActionIndex;byId("execution-previous").disabled=state.executionActionIndex===0;byId("execution-next").disabled=state.executionActionIndex===c.action_timeline.length-1;const apply=byId("execution-apply");apply.disabled=false;apply.textContent=state.executionActionIndex<=state.appliedExecutionActionThrough?"Event executed ✓":"Execute this event";byId("execution-progress").textContent=state.executionActionIndex<=state.appliedExecutionActionThrough?`Executed through event ${state.appliedExecutionActionThrough+1} of ${c.action_timeline.length}. This snapshot includes every cumulative memory transition through the selected event.`:`Previewing event ${state.executionActionIndex+1} of ${c.action_timeline.length}. Execute it to mark this event—and any required earlier events—complete.`;const lanes=byId("execution-lanes"),languageIds={Managed:"csharp","C++":"cpp",Rust:"rust"},languageTitles={Managed:"Managed C#","C++":"C++ Engine",Rust:"Rust V3"};clear(lanes);c.language_lanes.forEach(source=>{const id=languageIds[source.language],active=id===event.lang,card=el("article",`execution-lane${active?" active":""}`);card.dataset.language=id;card.append(el("b","",`${active?"● ":""}${languageTitles[source.language]}${active?" · ACTIVE":""}`),el("p","",source.role),el("p","",source.applicability),linksBlock(source.source_links));lanes.append(card)});clear(byId("execution-action"));byId("execution-action").append(el("h3","",`${state.executionActionIndex+1}. ${event.title}`),el("p","",event.what),fact("Why",event.why),fact("Stack effect",event.stack_effect),fact("Heap effect",event.heap_effect),linksBlock(event.source_links),linksBlock(common.source_links));renderExecutionMemory(c,event);const active=renderExecutionComponents(c,event),scenarios=c.scenarios;state.executionScenarioIndex=clamp(state.executionScenarioIndex,0,scenarios.length-1);const buttons=byId("scenario-buttons");clear(buttons);scenarios.forEach((x,i)=>{const b=el("button",i===state.executionScenarioIndex?"selected":"",x.type);b.addEventListener("click",()=>{state.executionScenarioIndex=i;renderExecute()});buttons.append(b)});const scenario=scenarios[state.executionScenarioIndex];byId("scenario-heading").textContent=`Change the condition · ${r.title}`;byId("scenario-output").textContent=`${scenario.type}: ${scenario.trigger} ${scenario.behavior} Ownership: ${scenario.ownership_effect}`;byId("pull-direction").textContent=active.pull_direction;byId("ownership-now").textContent=active.ownership;byId("next-breakpoint").textContent=active.breakpoint}
+function selectExecutionAction(i){state.executionActionIndex=clamp(i,0,currentRunner().execute.action_timeline.length-1);renderExecute()}function applyExecutionAction(){state.appliedExecutionActionThrough=Math.max(state.appliedExecutionActionThrough,state.executionActionIndex);renderExecute()}function resetExecutionLab(){state.executionActionIndex=0;state.appliedExecutionActionThrough=-1;state.executionScenarioIndex=0;renderExecute()}
+const stageNetworkDefaults=Object.freeze([
+["none","No HTTP","Local parser","Syntax construction is entirely in process."],
+["none","No HTTP yet","Semantic analyzer","Binding normally uses the available metadata context."],
+["none","No HTTP","Relop translator","Logical translation is entirely in process."],
+["none","No HTTP","Preparation passes","Preparation changes only local query state."],
+["none","No HTTP","Optimization passes","Initial optimization is entirely in process."],
+["none","No HTTP for this query","Partial-query collector","No partial query is submitted for this plan."],
+["none","No HTTP","Final optimization passes","Final optimization is entirely in process."],
+["none","No HTTP","Physical plan builder","Physical lowering is entirely in process."],
+["none","No external HTTP","Managed/native boundary","Serialization and submission remain in process."],
+["none","No HTTP at this substep","Native execution","This event does not issue an outbound request."]
+]);
+const NETWORK_OVERRIDES=Object.freeze({
+"1-0":{state:"possible",label:"May fetch",route:"Analyzer → metadata provider",purpose:"Creating semantic context may require metadata."},
+"1-2":{state:"possible",label:"May fetch",route:"Analyzer → remote schema provider",purpose:"Resolving remote scope may fetch schema."},
+"5-2":{state:"possible",label:"Conditional",route:"Partial evaluator → data source",purpose:"Only the optional evaluation path can issue a request."},
+"7-3":{state:"none",label:"No HTTP",route:"Physical builder → remote query node",purpose:"This step generates query text; it does not submit it."},
+"8-2":{state:"none",label:"No external HTTP",route:"Managed processor → native engine",purpose:"The handoff is an in-process interop call."},
+"9-3":{state:"imminent",label:"HTTP imminent",route:"Rust iterator → managed callback",purpose:"The callback is about to request the remote child."},
+"9-4":{state:"active",label:"HTTP active",route:`Managed client → ${model.query.cluster_uri}`,purpose:"The remote right child is executing."},
+"9-5":{state:"none",label:"HTTP response consumed",route:"Remote stream → local iterator",purpose:"The response is being consumed; no new request starts."}
+});
+function renderNetwork(){const base=stageNetworkDefaults[state.stage],override=NETWORK_OVERRIDES[`${state.stage}-${state.substep}`]||{},value={state:override.state??base[0],label:override.label??base[1],route:override.route??base[2],purpose:override.purpose??base[3]},beacon=byId("network-beacon");beacon.className=`network-beacon ${value.state}`;beacon.dataset.state=value.state;byId("network-state").textContent=value.label;byId("network-route").textContent=value.route;byId("network-purpose").textContent=value.purpose}
+function renderArtifact(){const x=currentSubstep();byId("artifact-title").textContent=x.artifact.title;byId("artifact-status").textContent=`${currentStage().title} · ${x.title}`;renderLinkedTreeBlock(byId("artifact-before"),x.artifact.before);renderLinkedTreeBlock(byId("artifact-after"),x.artifact.after);const root=byId("artifact-operators");clear(root);x.artifact.operators.forEach(o=>root.append(fact(o.label,o.state),linksBlock(o.source_links)))}
+function renderNoOp(){document.getElementById("runner-no-op")?.remove();const r=currentRunner();if(!r?.no_op.enabled)return;const p=el("section","callout");p.id="runner-no-op";p.append(el("h3","","No-op evidence gates"));r.no_op.gates.forEach(x=>p.append(fact("Gate",x)));r.no_op.reasons.forEach(x=>p.append(fact("Reason",x)));document.querySelector(".step-detail").before(p)}
+function renderAdditionalContext(){const section=byId("additional-context"),context=currentStage().additional_context;section.hidden=!(state.stage===3&&state.substep===1&&context);const body=byId("additional-context-body");clear(body);if(!section.hidden){body.append(el("p","",context.summary));context.tables.forEach(t=>body.append(el("h4","",t.title),renderTable(t.columns,t.rows),linksBlock(t.source_links)))}}
+function renderStepDetail(){const x=currentSubstep();byId("step-badge").textContent=`Stage ${state.stage+1} · Substep ${state.substep+1}`;byId("step-title").textContent=x.title;byId("step-summary").textContent=x.summary;byId("step-action").textContent=x.summary;byId("step-why").textContent=x.why;byId("step-observe").textContent=x.debug;byId("step-next").textContent=x.next;byId("step-count").textContent=`${state.substep+1} / ${currentStage().substeps.length}`;appendLinks(byId("step-links"),x.source_links);byId("substep-walk").textContent=x.behavior;byId("substep-change").textContent=x.change_badge;byId("substep-tree-detail").textContent=x.what_happens;const path=byId("call-path");clear(path);x.method_path.forEach((method,index)=>{if(index)path.append(el("i","","→"));const target=method.source_links[0],a=sourceAnchor(target);a.textContent=`${method.name} ↗`;a.title=`Open ${codeLocationLabel(target)}`;path.append(a)})}
+function runnerCount(x){if(!x.runner)return"";const n=x.runner.actions.length;return x.runner.type==="pass"?`run ${n} pass${n===1?"":"es"}`:x.runner.type==="boundary"?`explore ${n} actions`:x.runner.type==="execute"?`run ${n} runtime events`:`run ${n} actions`}
+function renderSubsteps(){const strip=byId("substep-strip");clear(strip);currentStage().substeps.forEach((x,i)=>{const card=el("div","substep-card"),b=el("button",`substep${i<state.substep?" done":""}${i===state.substep?" selected":""}`);b.append(el("small","",`Substep ${i+1}`),el("b","",x.title));const badges=el("span","substep-behavior");badges.append(el("span","walk",x.behavior),el("span","change",x.change_badge));if(x.runner)badges.append(el("span","runner-count",runnerCount(x)));b.append(badges);b.addEventListener("click",()=>selectStep(i));const a=sourceAnchor(x.source_links[0]);a.className="substep-code-link";card.append(b,a);strip.append(card)});const s=byId("step-slider");s.max=currentStage().substeps.length-1;s.value=state.substep;byId("previous-step").disabled=state.substep===0;byId("next-step").disabled=state.substep===currentStage().substeps.length-1;requestAnimationFrame(()=>scrollChildOnAxis(strip,strip.children[state.substep],"x"))}
+function renderStageOverview(){const s=currentStage();byId("stage-badge").textContent=`Stage ${state.stage+1} · ${s.kind}`;byId("stage-compact").textContent=`S${state.stage+1}`;byId("stage-title").textContent=s.title;byId("stage-purpose").textContent=`${s.overview.input} → ${s.overview.output}`;byId("stage-input").textContent=s.overview.input;byId("stage-output").textContent=s.overview.output;byId("stage-owner").textContent=s.overview.owner;byId("stage-not").textContent=s.overview.not_responsible;byId("stage-handoff").textContent=s.overview.handoff;byId("stage-no-op").hidden=!s.no_op_explanation;byId("stage-no-op").textContent=s.no_op_explanation;appendLinks(byId("stage-links"),s.source_links);byId("previous-stage").disabled=state.stage===0;byId("next-stage").disabled=state.stage===model.stages.length-1;byId("journey-progress").textContent=`Stage ${state.stage+1} of ${model.stages.length}`}
+function renderStages(){const root=byId("stage-strip");clear(root);model.stages.forEach((s,i)=>{const b=el("button",`stage-button${i===state.stage?" selected":""}${state.visitedStages.has(i)?" visited":""}`);b.append(el("span","num",i+1),el("span","name",i===8?"Serialize":s.title),el("span","kind",s.kind));b.addEventListener("click",()=>selectStage(i));root.append(b)});requestAnimationFrame(()=>scrollChildOnAxis(root,root.children[state.stage],"x"))}
+function renderStep(){renderStepDetail();renderNetwork();renderTraversal();renderPass();renderCompiler();renderPhysical();renderBoundary();renderExecute();renderNoOp();renderArtifact();renderAdditionalContext();linkCodeReferences(document.querySelector(".stage-overview"));linkCodeReferences(document.querySelector(".step-detail"));linkCodeReferences(document.querySelector(".traversal-card"))}
+function render(){renderStages();renderStageOverview();renderSubsteps();renderStep()}function selectStage(i){if(i<0||i>=model.stages.length)return;stopTraversal();stopBoundaryPlay();state.stage=i;state.substep=0;resetLabs();state.traversal=traversalFocuses[i][0]??0;state.visitedStages.add(state.stage);render()}function selectStep(i){if(i<0||i>=currentStage().substeps.length)return;const scrollX=window.scrollX,scrollY=window.scrollY;state.substep=i;resetLabs();stopTraversal();state.traversal=traversalFocuses[state.stage][i]??0;renderSubsteps();renderStep();window.scrollTo(scrollX,scrollY);window.requestAnimationFrame(() => window.scrollTo(scrollX, scrollY))}
+function toggleCard(selector,workspaceClass,buttonId,label){const card=document.querySelector(selector),collapsed=card.classList.toggle("collapsed"),button=byId(buttonId);byId("workspace").classList.toggle(workspaceClass,collapsed);button.textContent=collapsed?"+":"−";button.setAttribute("aria-expanded",String(!collapsed));button.title=collapsed?`Expand ${label}`:`Collapse ${label}`}
+function optimizationTableRows(){return[...document.querySelectorAll("#optimization-additional-context > .context-table-wrap .context-table tbody tr")]}
+function initializePassTable(){const canonical=model.stages[4].substeps[0].runner,body=byId("optimization-rows");canonical.pass.applicable_passes.forEach(p=>{const row=el("tr");row.append(el("td","",p.title),el("td","",p.optimization),el("td"));row.cells[2].append(sourceAnchor(p.source_links[0]));body.append(row)});optimizationTableRows().forEach((row,index)=>{row.classList.add("pass-row");row.dataset.passIndex=index;if(row.cells.length===3)row.insertCell();row.addEventListener("click",event=>{if(event.target.closest("a"))return;selectPass(index)})});document.querySelector(".step-detail").before(document.querySelector(".pass-lab"));byId("cluster").textContent=model.query.cluster_uri;byId("database").textContent=model.query.database;byId("commit").textContent=model.source.workspace_head;byId("query-text").textContent=model.query.text;if(model.evidence_mode==="ESTIMATED"){byId("estimate-reason").hidden=false;byId("estimate-reason").textContent=`ESTIMATED: ${model.estimate_reason}`}}
+byId("previous-stage").addEventListener("click",()=>selectStage(state.stage-1));byId("next-stage").addEventListener("click",()=>selectStage(state.stage+1));byId("previous-step").addEventListener("click",()=>selectStep(state.substep-1));byId("next-step").addEventListener("click",()=>selectStep(state.substep+1));byId("step-slider").addEventListener("input",e=>selectStep(Number(e.target.value)));byId("traversal-previous").addEventListener("click",()=>setTraversal(state.traversal-1));byId("traversal-next-button").addEventListener("click",()=>setTraversal(state.traversal+1));byId("traversal-slider").addEventListener("input",e=>setTraversal(Number(e.target.value)));byId("traversal-play").addEventListener("click",toggleTraversal);
+byId("compiler-reset").addEventListener("click",resetCompilerLab);byId("compiler-previous").addEventListener("click",()=>selectCompilerAction(state.compilerActionIndex-1));byId("compiler-next").addEventListener("click",()=>selectCompilerAction(state.compilerActionIndex+1));byId("compiler-apply").addEventListener("click",applyCompilerAction);byId("compiler-slider").addEventListener("input",e=>selectCompilerAction(Number(e.target.value)));byId("pass-reset").addEventListener("click",resetPassLab);byId("pass-previous").addEventListener("click",()=>selectPass(state.passIndex-1));byId("pass-next").addEventListener("click",()=>selectPass(state.passIndex+1));byId("pass-apply").addEventListener("click",applySelectedPass);byId("pass-slider").addEventListener("input",e=>selectPass(Number(e.target.value)));byId("pass-node-previous").addEventListener("click",()=>setPassNode(state.passNodeIndex-1));byId("pass-node-next").addEventListener("click",()=>setPassNode(state.passNodeIndex+1));byId("pass-node-slider").addEventListener("input",e=>setPassNode(Number(e.target.value)));
+byId("physical-reset").addEventListener("click",resetPhysicalLab);byId("physical-previous").addEventListener("click",()=>selectPhysicalAction(state.physicalActionIndex-1));byId("physical-next").addEventListener("click",()=>selectPhysicalAction(state.physicalActionIndex+1));byId("physical-apply").addEventListener("click",applyPhysicalAction);byId("physical-slider").addEventListener("input",e=>selectPhysicalAction(Number(e.target.value)));byId("boundary-reset").addEventListener("click",resetBoundaryLab);byId("boundary-previous").addEventListener("click",()=>moveBoundaryAction(-1));byId("boundary-next").addEventListener("click",()=>moveBoundaryAction(1));byId("boundary-play").addEventListener("click",toggleBoundaryPlay);byId("execution-reset").addEventListener("click",resetExecutionLab);byId("execution-previous").addEventListener("click",()=>selectExecutionAction(state.executionActionIndex-1));byId("execution-next").addEventListener("click",()=>selectExecutionAction(state.executionActionIndex+1));byId("execution-apply").addEventListener("click",applyExecutionAction);byId("execution-slider").addEventListener("input",e=>selectExecutionAction(Number(e.target.value)));byId("stage-toggle").addEventListener("click",()=>toggleCard(".stage-overview","stage-collapsed","stage-toggle","stage overview"));byId("artifact-toggle").addEventListener("click",()=>toggleCard(".artifact-card","artifact-collapsed","artifact-toggle","artifact card"));document.addEventListener("keydown",event=>{if(event.target.matches("input, button"))return;if(event.key==="ArrowLeft")selectStep(state.substep-1);if(event.key==="ArrowRight")selectStep(state.substep+1);if(event.key==="ArrowUp"){event.preventDefault();selectStage(state.stage-1)}if(event.key==="ArrowDown"){event.preventDefault();selectStage(state.stage+1)}});
+window.walkthroughApp=Object.freeze({featureIds:FEATURE_IDS,selectStage,selectStep,selectSubstep:selectStep,setTraversal,toggleTraversal,selectCompilerAction,selectPass,selectPhysicalAction,selectBoundaryAction:i=>{state.boundaryActionIndex=i;renderBoundary()},selectExecutionAction,applyCompilerAction,applySelectedPass,applyPhysicalAction,applyExecutionAction,snapshot:()=>({stage:state.stage,substep:state.substep,traversal:state.traversal,runner:currentRunner()?.type==="compiler"?state.compilerActionIndex:currentRunner()?.type==="pass"?state.passIndex:currentRunner()?.type==="physical"?state.physicalActionIndex:currentRunner()?.type==="boundary"?state.boundaryActionIndex:currentRunner()?.type==="execute"?state.executionActionIndex:0,visited:[...state.visitedStages],traversalTimer:Boolean(state.traversalTimer),boundaryTimer:Boolean(state.boundaryTimer),compilerApplied:state.appliedCompilerActionThrough,passApplied:state.appliedPassThrough,physicalApplied:state.appliedPhysicalActionThrough,executionApplied:state.appliedExecutionActionThrough})});
+    initializePassTable();
+    render();
+</script>
 </body>
 </html>

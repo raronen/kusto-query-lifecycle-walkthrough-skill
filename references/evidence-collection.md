@@ -26,9 +26,10 @@ Record only:
 - a SHA-256 digest of the raw plan;
 - sanitized structural facts needed by the walkthrough.
 
-Keep raw proprietary plans outside this repository and out of the generated HTML. The model
-must describe operators without embedding confidential payloads, literals, tenant data, or
-internal identifiers.
+Keep raw proprietary plans outside this repository. A local model/page may include an authorized
+raw-plan section only when the evidence policy permits it and the canonical physical deep dive
+requires it; redact confidential payloads, literals, tenant data, request identifiers, and
+credentials first. Repository fixtures remain synthetic and contain no proprietary plan.
 
 ## Evidence modes
 
@@ -56,3 +57,8 @@ Evidence collection, model completion, validation, and HTML rendering never depe
 companion availability. Do not run a companion preflight or ask the user about publication.
 Only after the valid HTML exists may the publisher be attempted best-effort. Preserve the model
 and HTML and report a bookmark warning when publication is skipped or fails.
+
+Rendering is complete only after `scripts/spec_compliance.py` validates the model and generated
+HTML against every item in `spec-compliance-manifest.json`. The four canonical runner omissions
+are structural requirements, not missing evidence. Query-specific source paths and line ranges
+replace canonical example values while retaining exact-line current-HEAD pinning.

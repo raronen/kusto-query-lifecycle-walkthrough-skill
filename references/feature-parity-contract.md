@@ -1,9 +1,41 @@
 # Feature parity contract
 
-This contract captures reusable interaction architecture from the canonical local walkthrough.
-It excludes its query text, plan payloads, internal content, and fixed source revision. The
-machine-readable companion is
-[feature-parity-inventory.json](feature-parity-inventory.json).
+The bundled
+[authoritative as-built specification](query-lifecycle-two-level-walkthrough.spec.md) is
+normative and wins every conflict. This document is supplementary implementation guidance only.
+Generated HTML must implement all 93 tracked acceptance items in
+[spec-compliance-manifest.json](spec-compliance-manifest.json). Canonical query text, raw plan
+payloads, source snippets, and fixed example revisions remain excluded; query-specific values
+and exact current-HEAD links are supplied by the validated runtime model.
+
+## Normative reconciliation and parameterization
+
+The canonical as-built behavior supersedes the earlier v2 rule that every substep has a runner.
+S4.1, S4.4, S6.1, and S6.2 intentionally omit the runner, runner badge, lab, and placeholder.
+All other canonical control, transition, omission, layout, and documented `[C]` behavior remains
+normative.
+
+Literal example data in the specification is parameterized where reuse or evidence safety
+requires it:
+
+- Azure DevOps links retain the canonical absolute, line-bounded shape but use the authorized
+  workspace current HEAD and query-specific paths and lines, never the stale example revision.
+- Query text, operator names, plan nodes, NodeIds, target scopes, schemas, method paths, runtime
+  components, memory objects, and breakpoint text come from the validated query model.
+- The canonical full raw plan example is never bundled. A raw-plan section appears only when
+  authorized non-executing evidence permits it; otherwise the complete modeled tree remains
+  visible and the limitation is explicit.
+- Pass rails keep the canonical coordinate-specific capacities and interaction behavior, while
+  pass names, predicates, transformations, and scheduled no-ops remain evidence-driven.
+- Boundary node labels and byte offsets are evidence-driven. The canonical node-picker, three
+  representations, 16-byte hex rows, 192-byte display limit, context-only recomputation, quiz,
+  failure injection, and debugger-map behaviors are fixed.
+- Execute timelines keep the canonical event and scenario counts. The first three execution
+  substeps combine memory and lifetime into one scenario so three choices still cover failure,
+  cancellation, memory, and lifetime; later substeps use four choices.
+
+These substitutions change only canonical example values. They do not relax any interaction,
+topology, safety, source-pinning, or evidence-label requirement.
 
 ## Baseline gap
 
@@ -51,10 +83,12 @@ Every generated page must expose the semantic feature IDs listed in the JSON inv
 - keyboard navigation, visible focus, responsive layouts, reduced-motion behavior, and print
   output.
 
-## Mandatory per-substep runner
+## Canonical runner topology
 
-Every complete-model substep has exactly one runner. No-op phases are retained and use the
-same phase-appropriate runner with explicit evidence gates and reasons. A runner must have:
+The ten stages contain exactly `4, 5, 4, 4, 5, 4, 5, 5, 3, 6` substeps. Exactly four
+substeps omit the runner entirely: S4.1, S4.4, S6.1, and S6.2. They show no runner badge,
+no lab, and no placeholder. The other 41 substeps use the position-specific runner family and
+interaction counts in `scripts/canonical_spec.py`. A present runner must have:
 
 - reset, previous, next, apply/execute, range, and action-rail controls;
 - two or more distinct visible snapshots;
@@ -62,8 +96,9 @@ same phase-appropriate runner with explicit evidence gates and reasons. A runner
 - one or more interactive experiments with option-specific results;
 - no inert controls.
 
-The validator rejects missing runners, mismatched runner types, duplicate snapshots,
-unexplained no-ops, pass outcome contradictions, and incomplete source grounding.
+The validator rejects omitted required runners, runners at the four omission coordinates,
+mismatched position-specific runner types/counts, duplicate snapshots, unexplained no-ops,
+pass outcome contradictions, and incomplete source grounding.
 
 ## Specialized systems
 
@@ -81,7 +116,8 @@ explicitly `SCHEDULED_NO_OP`, never a claimed transformation.
 
 ### Physical plan
 
-Every physical substep has its own runner and input-contract collapse. The deep dive carries
+S8.1 through S8.4 have physical runners and input-contract collapses. S8.5 switches to a pass
+runner and is the only location of the physical-plan deep dive. The deep dive carries
 the complete evidenced plan, linked operators, logical-to-physical mapping, schemas, node IDs,
 key indexes, execution/Rust eligibility, target scope, remote metadata, and only those raw
 sections allowed by the evidence policy.

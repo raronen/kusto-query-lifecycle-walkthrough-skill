@@ -9,12 +9,12 @@ from typing import Any
 
 from model_contract import (
     ModelError,
-    RUNNER_TYPES,
     STAGES,
     is_authorized_source_remote,
     query_slug,
     validate_cluster_uri,
 )
+from canonical_spec import CANONICAL_SUBSTEPS
 
 
 def resolve_head(workspace: str | None, project: str) -> str:
@@ -67,62 +67,56 @@ def _action(action_id: str, title: str) -> dict[str, Any]:
     }
 
 
-def _snapshots(stage_id: str) -> list[dict[str, Any]]:
+def _snapshots(key: str, count: int) -> list[dict[str, Any]]:
     return [
         {
-            "id": f"{stage_id}-enter",
-            "label": "Enter",
-            "progress": 0,
-            "current": "input",
-            "movement": "input-to-owner",
-            "return_value": "owner-to-input",
-            "next": "owner",
-            "visible_state": "Pending runner entry state.",
+            "id": f"{key}-snapshot-{index + 1}",
+            "label": f"Step {index + 1}",
+            "progress": round(index * 100 / max(count - 1, 1)),
+            "current": f"node-{index}",
+            "movement": f"node-{index}-to-{index + 1}",
+            "return_value": f"node-{index}-return",
+            "next": f"node-{min(index + 1, count - 1)}",
+            "visible_state": f"Pending runner state {index + 1}.",
             "source_links": [],
-        },
-        {
-            "id": f"{stage_id}-leave",
-            "label": "Leave",
-            "progress": 100,
-            "current": "owner",
-            "movement": "owner-to-output",
-            "return_value": "output-to-owner",
-            "next": "output",
-            "visible_state": "Pending runner result state.",
-            "source_links": [],
-        },
+        }
+        for index in range(max(count, 2))
     ]
 
 
-def _common_runner(stage_id: str, title: str) -> dict[str, Any]:
-    runner_type = RUNNER_TYPES[stage_id]
+def _common_runner(
+    stage_id: str, key: str, title: str, runner_type: str, count: int
+) -> dict[str, Any]:
     runner = {
         "type": runner_type,
         "title": f"Run the {title.lower()} {runner_type} yourself",
-        "actions": [_action(f"{stage_id}-runner-action", "Inspect the pending action")],
-        "snapshots": _snapshots(stage_id),
+        "actions": [
+            _action(f"{key}-action-{index + 1}", f"Inspect pending action {index + 1}")
+            for index in range(count)
+        ],
+        "snapshots": _snapshots(key, count),
         "experiments": [
             {
-                "id": f"{stage_id}-experiment",
+                "id": f"{key}-experiment",
                 "title": "Pending query-specific experiment",
                 "control": "select",
                 "options": [
                     {
-                        "id": f"{stage_id}-baseline",
+                        "id": f"{key}-baseline",
                         "label": "Inspect the baseline",
                     },
                     {
-                        "id": f"{stage_id}-alternative",
+                        "id": f"{key}-alternative",
                         "label": "Inspect the alternate gate",
                     },
                 ],
                 "results": [
                     {
-                        "option_id": f"{stage_id}-baseline",
+                        "option_id": f"{key}-baseline",
                         "result": "Pending baseline result.",
                     },
                     {
-                        "option_id": f"{stage_id}-alternative",
+                        "option_id": f"{key}-alternative",
                         "result": "Pending alternate result.",
                     },
                 ],
@@ -137,14 +131,24 @@ def _common_runner(stage_id: str, title: str) -> dict[str, Any]:
         "source_links": [],
     }
     if runner_type == "pass":
-        runner["actions"][0].update(
-            {
-                "traversal": "Pending traversal.",
-                "predicate": "Pending predicate.",
-                "applicability": "Pending query-specific applicability.",
-                "optimization": "Pending optimization target.",
-            }
-        )
+        for action in runner["actions"]:
+            action.update(
+                {
+                    "traversal": "Pending traversal.",
+                    "predicate": "Pending predicate.",
+                    "applicability": "Pending query-specific applicability.",
+                    "optimization": "Pending optimization target.",
+                }
+            )
+    if runner_type == "boundary":
+        for index, action in enumerate(runner["actions"]):
+            action["lane"] = (
+                "C#"
+                if key != "8-2" or index < 4
+                else "Interop"
+                if index == 4
+                else "C++"
+            )
     return runner
 
 
@@ -153,7 +157,7 @@ def _compiler_runner(stage_id: str) -> dict[str, Any]:
         "mode": {
             "syntax": "syntax",
             "semantic": "semantic",
-            "relop": "csl-to-relop",
+            "relop": "relop",
         }[stage_id],
         "before_actions": [
             _action(f"{stage_id}-before-action", "Inspect compiler input")
@@ -165,7 +169,7 @@ def _compiler_runner(stage_id: str) -> dict[str, Any]:
     }
     mapping_kind = {
         "semantic": "semantic",
-        "relop": "csl-to-relop",
+        "relop": "relop",
     }.get(stage_id)
     if mapping_kind:
         compiler["mapping"] = [
@@ -179,12 +183,12 @@ def _compiler_runner(stage_id: str) -> dict[str, Any]:
     return compiler
 
 
-def _pass_runner(stage_id: str) -> dict[str, Any]:
+def _pass_runner(key: str, count: int) -> dict[str, Any]:
     return {
         "applicable_passes": [
             {
-                "id": f"{stage_id}-applicable-pass",
-                "title": "Pending applicable pass",
+                "id": f"{key}-applicable-pass-{index + 1}",
+                "title": f"Pending applicable pass {index + 1}",
                 "traversal": "Pending traversal.",
                 "predicate": "Pending predicate.",
                 "applicability": "Pending query-specific applicability.",
@@ -194,10 +198,11 @@ def _pass_runner(stage_id: str) -> dict[str, Any]:
                 "outcome": "ESTIMATED",
                 "source_links": [],
             }
+            for index in range(count)
         ],
         "cumulative_before": "Pending cumulative input.",
         "cumulative_after": "Pending cumulative output.",
-        "additional_context_tables": [_table(stage_id)],
+        "additional_context_tables": [_table(key)],
     }
 
 
@@ -302,31 +307,55 @@ def _boundary_runner(stage_id: str) -> dict[str, Any]:
     }
 
 
-def _execute_runner(stage_id: str) -> dict[str, Any]:
+def _execute_runner(key: str, count: int) -> dict[str, Any]:
+    scenario_types = (
+        ("failure", "cancellation", "memory/lifetime")
+        if key in {"9-0", "9-1", "9-2"}
+        else ("failure", "cancellation", "memory", "lifetime")
+    )
     return {
         "action_timeline": [
             {
-                "id": f"{stage_id}-timeline-action",
-                "title": "Pending execution action",
+                "id": f"{key}-timeline-action-{index + 1}",
+                "title": f"Pending execution action {index + 1}",
                 "what": "Pending.",
                 "why": "Pending.",
                 "stack_effect": "Pending.",
                 "heap_effect": "Pending.",
+                "lang": "csharp",
+                "memory": [
+                    {
+                        "op": "add"
+                        if index == 0
+                        else "release"
+                        if index == count - 1
+                        else "update",
+                        "zone": "managed",
+                        "id": f"{key}-managed-state",
+                        "title": "Pending managed query state",
+                        "detail": "Pending query-specific lifetime evidence.",
+                    }
+                ],
+                "active": f"{key}-component",
+                "live": [f"{key}-component"],
                 "source_links": [],
             }
+            for index in range(count)
         ],
         "language_lanes": [
             {
-                "language": "Managed",
+                "language": language,
                 "role": "Pending evidenced role.",
                 "applicability": "Pending query-specific applicability.",
                 "source_links": [],
             }
+            for language in ("Managed", "C++", "Rust")
         ],
         "call_stack": [
             {
                 "position": 0,
                 "language": "Managed",
+                "kind": "csharp",
                 "frame": "Pending conceptual frame.",
                 "what": "Pending.",
                 "why": "Pending.",
@@ -335,18 +364,25 @@ def _execute_runner(stage_id: str) -> dict[str, Any]:
         ],
         "heap_zones": [
             {
-                "id": f"{stage_id}-heap",
-                "language": "Managed",
+                "id": f"{key}-{zone}-state",
+                "zone": zone,
+                "language": language,
                 "state": "live",
                 "what": "Pending applicable heap or lifetime zone.",
                 "why": "Pending.",
                 "owner": "Pending.",
                 "source_links": [],
             }
+            for zone, language in (
+                ("managed", "Managed"),
+                ("borrowed", "Managed"),
+                ("cpp", "C++"),
+                ("rust", "Rust"),
+            )
         ],
         "components": [
             {
-                "id": f"{stage_id}-component",
+                "id": f"{key}-component",
                 "name": "Pending runtime component",
                 "evidence_ref": "pending-physical-or-boundary-id",
                 "state": "not-created",
@@ -366,20 +402,27 @@ def _execute_runner(stage_id: str) -> dict[str, Any]:
                 "ownership_effect": "Pending.",
                 "source_links": [],
             }
-            for scenario_type in ("failure", "cancellation", "memory", "lifetime")
+            for scenario_type in scenario_types
         ],
     }
 
 
-def _runner(stage_id: str, title: str) -> dict[str, Any]:
-    runner = _common_runner(stage_id, title)
-    runner_type = runner["type"]
+def _runner(
+    stage_id: str, key: str, title: str, runner_type: str, count: int
+) -> dict[str, Any]:
+    runner = _common_runner(stage_id, key, title, runner_type, count)
     runner[runner_type] = {
         "compiler": _compiler_runner,
         "pass": _pass_runner,
         "physical": _physical_runner,
         "boundary": _boundary_runner,
         "execute": _execute_runner,
+    }[runner_type](
+        key, count
+    ) if runner_type in {"pass", "execute"} else {
+        "compiler": _compiler_runner,
+        "physical": _physical_runner,
+        "boundary": _boundary_runner,
     }[runner_type](stage_id)
     return runner
 
@@ -391,9 +434,7 @@ def _stage(
     order: int,
     query_hint: str,
 ) -> dict[str, Any]:
-    node_input = f"{stage_id}-input"
-    node_owner = f"{stage_id}-owner"
-    node_output = f"{stage_id}-output"
+    canonical_stage = CANONICAL_SUBSTEPS[order - 1]
     stage: dict[str, Any] = {
         "id": stage_id,
         "order": order,
@@ -409,10 +450,15 @@ def _stage(
             "not_responsible": "Pending responsibility boundary.",
             "handoff": "Pending handoff.",
         },
-        "substeps": [
-            {
-                "id": f"{stage_id}-query-path",
-                "title": f"Trace {title.lower()} for the supplied query",
+        "substeps": [],
+    }
+    for canonical in canonical_stage:
+        node_input = f"{canonical.key}-input"
+        node_owner = f"{canonical.key}-owner"
+        node_output = f"{canonical.key}-output"
+        substep = {
+                "id": canonical.key,
+                "title": canonical.title,
                 "behavior": "Pending query-specific behavior.",
                 "change_badge": "PENDING",
                 "summary": f"Draft substep derived from query shape: {query_hint}.",
@@ -420,7 +466,12 @@ def _stage(
                 "why": "Pending source-grounded rationale.",
                 "debug": "Pending exact breakpoint and inspection guidance.",
                 "next": "Pending lifecycle handoff.",
-                "method_path": ["Pending exact method path."],
+                "method_path": [
+                    {
+                        "name": "Pending exact method path.",
+                        "source_links": [],
+                    }
+                ],
                 "source_links": [],
                 "traversal": {
                     "nodes": [
@@ -480,13 +531,23 @@ def _stage(
                         },
                     ],
                 },
-                "runner": _runner(stage_id, title),
             }
-        ],
-    }
-    if kind == "optimizer":
+        if canonical.runner_type is not None:
+            substep["runner"] = _runner(
+                stage_id,
+                canonical.key,
+                canonical.title,
+                canonical.runner_type,
+                canonical.item_count,
+            )
+        stage["substeps"].append(substep)
+    if kind == "optimizer" or stage_id == "preparation":
         stage["additional_context"] = {
-            "summary": "Pending cumulative optimizer context.",
+            "summary": (
+                "Pending preparation ownership and scheduling context."
+                if stage_id == "preparation"
+                else "Pending cumulative optimizer context."
+            ),
             "tables": [_table(stage_id)],
         }
     return stage
