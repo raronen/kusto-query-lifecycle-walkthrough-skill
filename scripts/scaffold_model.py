@@ -15,6 +15,7 @@ from model_contract import (
     validate_cluster_uri,
 )
 from canonical_spec import CANONICAL_SUBSTEPS
+from plan_recovery import pending_recovery
 
 
 def resolve_head(workspace: str | None, project: str) -> str:
@@ -566,7 +567,7 @@ def main() -> int:
     args = parser.parse_args()
 
     query_path = Path(args.query_file).expanduser().resolve()
-    query = query_path.read_text(encoding="utf-8")
+    query = query_path.read_bytes().decode("utf-8")
     if not query.strip():
         parser.error("--query-file must contain non-empty query text")
     try:
@@ -604,7 +605,15 @@ def main() -> int:
             "collected_at_utc": "",
             "non_executing": True,
             "digest_sha256": "",
+            "sanitized_digest_sha256": "",
+            "sanitized_queryplan": {},
             "operator_count": 0,
+            **pending_recovery(
+                query,
+                automatic_deficiency=(
+                    "Automatic evidence has not yet established a complete physical QueryPlan."
+                ),
+            ),
         },
         "network_beacon": {
             "state": "ENABLED",

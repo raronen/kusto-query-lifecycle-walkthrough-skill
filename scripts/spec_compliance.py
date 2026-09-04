@@ -149,6 +149,22 @@ def build_manifest(spec_path: Path = SPEC_PATH) -> dict[str, Any]:
         "acceptance_item_count": EXPECTED_ACCEPTANCE_ITEMS,
         "automated_count": EXPECTED_ACCEPTANCE_ITEMS,
         "manual_count": 0,
+        "workflow_extensions": [
+            {
+                "id": "WE-PHYSICAL-QUERYPLAN-RECOVERY",
+                "scope": "pre-render evidence acquisition",
+                "reason": (
+                    "Require a user-assisted recovery attempt before ESTIMATED fallback when "
+                    "automatic evidence lacks a complete physical QueryPlan."
+                ),
+                "implementation": [
+                    "scripts/plan_recovery.py",
+                    "scripts/model_contract.py",
+                    "references/evidence-collection.md",
+                ],
+                "canonical_spec_impact": "none",
+            }
+        ],
         "parameterizations": [
             {
                 "item_id": "AC-A2326BC5E437D8D5",
@@ -287,6 +303,14 @@ def validate_manifest(manifest: dict[str, Any], spec_path: Path = SPEC_PATH) -> 
     parameterizations = manifest.get("parameterizations")
     if not isinstance(parameterizations, list):
         raise ModelError("Compliance manifest parameterizations must be an array.")
+    extensions = manifest.get("workflow_extensions")
+    if not isinstance(extensions, list) or not any(
+        extension.get("id") == "WE-PHYSICAL-QUERYPLAN-RECOVERY"
+        and extension.get("canonical_spec_impact") == "none"
+        for extension in extensions
+        if isinstance(extension, dict)
+    ):
+        raise ModelError("Compliance manifest lacks the physical QueryPlan recovery extension.")
     parameterized_ids: set[str] = set()
     for entry in parameterizations:
         if not isinstance(entry, dict):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -211,8 +212,8 @@ def rich_model() -> dict[str, Any]:
                     else f"{substep['id']}: cumulative after"
                 )
 
-    child = _operator("op-source", "node-source", "Synthetic source", [])
-    root = _operator("op-filter", "node-filter", "Synthetic filter", [child])
+    child = _operator("op-source", "node-2", "IteratorScan", [])
+    root = _operator("op-filter", "node-1", "HashJoin", [child])
     for substep in stages[7]["substeps"][:4]:
         physical = substep["runner"]["physical"]
         physical["full_plan"] = {"complete": True, "operator_count": 2, "roots": [root]}
@@ -278,6 +279,24 @@ def rich_model() -> dict[str, Any]:
 
     _set_evidence(stages, "OBSERVED")
     _fill_links(stages, [0])
+    sanitized_queryplan = {
+        "RootOperator": {
+            "NodeId": 0,
+            "Operators": [
+                {
+                    "$type": "HashJoin",
+                    "NodeId": 1,
+                    "Build": {"$type": "IteratorScan", "NodeId": 2},
+                }
+            ],
+        }
+    }
+    sanitized_plan_bytes = json.dumps(
+        sanitized_queryplan,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
     return {
         "schema_version": "2.0",
         "model_state": "COMPLETE",
@@ -301,7 +320,25 @@ def rich_model() -> dict[str, Any]:
             "collected_at_utc": "2026-01-01T00:00:00Z",
             "non_executing": True,
             "digest_sha256": hashlib.sha256(b"synthetic-plan").hexdigest(),
+            "sanitized_digest_sha256": hashlib.sha256(
+                sanitized_plan_bytes
+            ).hexdigest(),
+            "sanitized_queryplan": sanitized_queryplan,
             "operator_count": 2,
+            "complete_physical_queryplan": True,
+            "provenance": "automatic",
+            "recovery": {
+                "required": False,
+                "prompted": False,
+                "command": "",
+                "deeplink_status": "not_needed",
+                "deeplink_url": "",
+                "outcome": "accepted",
+                "deficiency": "",
+                "automatic_evidence": "",
+                "prompted_at_utc": "",
+                "prompt_digest_sha256": "",
+            },
         },
         "network_beacon": {
             "state": "ENABLED",

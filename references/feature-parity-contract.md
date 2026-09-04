@@ -37,6 +37,12 @@ requires it:
 These substitutions change only canonical example values. They do not relax any interaction,
 topology, safety, source-pinning, or evidence-label requirement.
 
+User-assisted complete physical `QueryPlan` recovery is a pre-render evidence-acquisition
+extension outside the canonical page parity surface. It changes neither the 93 acceptance items
+nor the as-built specification. The renderer and publisher output report whether plan evidence
+was automatic, user-supplied after recovery, or estimated only after an explicit recovery
+outcome.
+
 ## Baseline gap
 
 Static markup inventory was produced by `scripts/audit_html_features.py`. Dynamic content is

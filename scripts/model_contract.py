@@ -10,6 +10,11 @@ from typing import Any, Callable, Iterable
 from urllib.parse import parse_qs, urlparse
 
 from canonical_spec import BOUNDARY_LANES_BY_KEY, CANONICAL_SUBSTEPS
+from plan_recovery import (
+    SERIALIZED_CHILD_KEYS,
+    build_recovery_prompt,
+    is_utc_timestamp,
+)
 
 
 STAGES = (
@@ -858,9 +863,117 @@ def _validate_operator(
     )
 
 
+def _topology_sort_key(node: tuple[Any, ...]) -> tuple[str, str]:
+    return node[0], node[1]
+
+
+def _sanitized_nodes(value: Any, location: str, node_ids: set[str]) -> list[tuple[Any, ...]]:
+    if isinstance(value, list):
+        if not value:
+            raise ModelError(f"{location} must not be empty.")
+        result: list[tuple[Any, ...]] = []
+        for index, item in enumerate(value):
+            children = _sanitized_nodes(item, f"{location}[{index}]", node_ids)
+            if not children:
+                raise ModelError(f"{location}[{index}] has no sanitized physical operator.")
+            result.extend(children)
+        return result
+    node = _object(value, location)
+    allowed = {"$type", "NodeId"} | {
+        key for key in node if key.lower() in SERIALIZED_CHILD_KEYS
+    }
+    extras = sorted(set(node) - allowed)
+    if extras:
+        raise ModelError(
+            f"{location} contains unsafe or unsupported sanitized fields: {', '.join(extras)}."
+        )
+    has_type = "$type" in node
+    if has_type != ("NodeId" in node):
+        raise ModelError(f"{location} must pair $type with NodeId.")
+    descendants: list[tuple[Any, ...]] = []
+    for key, child in node.items():
+        if key.lower() in SERIALIZED_CHILD_KEYS:
+            descendants.extend(_sanitized_nodes(child, f"{location}.{key}", node_ids))
+    if not has_type:
+        if not descendants:
+            raise ModelError(f"{location} has no sanitized physical operator.")
+        return descendants
+    node_type = _text(node["$type"], f"{location}.$type")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", node_type):
+        raise ModelError(f"{location}.$type is not a normalized physical type.")
+    numeric_id = _integer(node["NodeId"], f"{location}.NodeId")
+    node_id = f"node-{numeric_id}"
+    if node_id in node_ids:
+        raise ModelError(f"{location}.NodeId is duplicated.")
+    node_ids.add(node_id)
+    return [
+        (
+            node_id,
+            node_type,
+            tuple(sorted(descendants, key=_topology_sort_key)),
+        )
+    ]
+
+
+def _validate_sanitized_queryplan(
+    value: Any, mode: str, digest: str, plan_count: int
+) -> tuple[Any, ...] | None:
+    if mode == "ESTIMATED":
+        if value != {}:
+            raise ModelError("ESTIMATED mode must not retain sanitized QueryPlan evidence.")
+        return None
+    plan = _shape(value, ("RootOperator",), "model.plan.sanitized_queryplan")
+    root = _shape(
+        plan["RootOperator"],
+        ("NodeId", "Operators"),
+        "model.plan.sanitized_queryplan.RootOperator",
+    )
+    _integer(root["NodeId"], "model.plan.sanitized_queryplan.RootOperator.NodeId")
+    node_ids: set[str] = set()
+    topology = tuple(
+        sorted(
+            _sanitized_nodes(
+                root["Operators"],
+                "model.plan.sanitized_queryplan.RootOperator.Operators",
+                node_ids,
+            ),
+            key=_topology_sort_key,
+        )
+    )
+    if len(node_ids) != plan_count:
+        raise ModelError(
+            "model.plan.sanitized_queryplan operator count does not match model.plan.operator_count."
+        )
+    canonical = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    if hashlib.sha256(canonical).hexdigest() != digest:
+        raise ModelError(
+            "model.plan.sanitized_digest_sha256 does not match sanitized QueryPlan evidence."
+        )
+    return topology
+
+
+def _model_operator_topology(roots: list[Any]) -> tuple[Any, ...]:
+    def node(value: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            value["node_id"],
+            value["name"],
+            tuple(
+                sorted(
+                    (node(child) for child in value["children"]),
+                    key=_topology_sort_key,
+                )
+            ),
+        )
+
+    return tuple(sorted((node(root) for root in roots), key=_topology_sort_key))
+
+
 def _validate_physical(
     value: Any,
     plan_count: int,
+    plan_topology: tuple[Any, ...] | None,
     mode: str,
     head: str,
     project: str,
@@ -922,6 +1035,10 @@ def _validate_physical(
     )
     if expected_count != actual_count or plan_count != actual_count:
         raise ModelError(f"{location}.full_plan operator counts do not match its tree.")
+    if mode == "EVIDENCE" and _model_operator_topology(roots) != plan_topology:
+        raise ModelError(
+            f"{location}.full_plan topology does not match the sanitized QueryPlan evidence."
+        )
     mappings = _list(
         physical["logical_to_physical"],
         f"{location}.logical_to_physical",
@@ -1359,6 +1476,7 @@ def _validate_runner(
     badge: str,
     stage_no_op: bool,
     plan_count: int,
+    plan_topology: tuple[Any, ...] | None,
     mode: str,
     head: str,
     project: str,
@@ -1503,6 +1621,7 @@ def _validate_runner(
             _validate_physical(
                 runner["physical"],
                 plan_count,
+                plan_topology,
                 mode,
                 head,
                 project,
@@ -1532,6 +1651,7 @@ def _validate_substep(
     stage_id: str,
     stage_no_op: bool,
     plan_count: int,
+    plan_topology: tuple[Any, ...] | None,
     mode: str,
     head: str,
     project: str,
@@ -1608,6 +1728,7 @@ def _validate_substep(
             badge,
             stage_no_op,
             plan_count,
+            plan_topology,
             mode,
             head,
             project,
@@ -1635,6 +1756,162 @@ def _validate_network_beacon(value: Any, project: str, location: str) -> None:
         raise ModelError(f"{location}.purpose must explicitly describe outbound source navigation.")
 
 
+def _validate_plan_recovery(plan: dict[str, Any], query: str, mode: str) -> None:
+    complete = _boolean(
+        plan["complete_physical_queryplan"], "model.plan.complete_physical_queryplan"
+    )
+    provenance = _text(plan["provenance"], "model.plan.provenance")
+    recovery = _shape(
+        plan["recovery"],
+        (
+            "required",
+            "prompted",
+            "command",
+            "deeplink_status",
+            "deeplink_url",
+            "outcome",
+            "deficiency",
+            "automatic_evidence",
+            "prompted_at_utc",
+            "prompt_digest_sha256",
+        ),
+        "model.plan.recovery",
+    )
+    required = _boolean(recovery["required"], "model.plan.recovery.required")
+    prompted = _boolean(recovery["prompted"], "model.plan.recovery.prompted")
+    command = _text(
+        recovery["command"], "model.plan.recovery.command", allow_empty=(mode == "EVIDENCE")
+    )
+    deeplink_status = _text(
+        recovery["deeplink_status"], "model.plan.recovery.deeplink_status"
+    )
+    deeplink_url = _text(
+        recovery["deeplink_url"], "model.plan.recovery.deeplink_url", allow_empty=True
+    )
+    outcome = _text(recovery["outcome"], "model.plan.recovery.outcome")
+    deficiency = _text(
+        recovery["deficiency"], "model.plan.recovery.deficiency", allow_empty=(mode == "EVIDENCE")
+    )
+    automatic_evidence = _text(
+        recovery["automatic_evidence"],
+        "model.plan.recovery.automatic_evidence",
+        allow_empty=(mode == "EVIDENCE"),
+    )
+    prompted_at_utc = _text(
+        recovery["prompted_at_utc"],
+        "model.plan.recovery.prompted_at_utc",
+        allow_empty=not prompted,
+    )
+    prompt_digest = _text(
+        recovery["prompt_digest_sha256"],
+        "model.plan.recovery.prompt_digest_sha256",
+        allow_empty=not prompted,
+    )
+    expected_command = f".show queryplan <|\n{query}"
+    if prompted:
+        if not is_utc_timestamp(prompted_at_utc):
+            raise ModelError("Recovery prompt timestamp must be UTC RFC 3339.")
+        if not re.fullmatch(r"[0-9a-f]{64}", prompt_digest):
+            raise ModelError("Recovery prompt requires its SHA-256 digest.")
+        expected_prompt = build_recovery_prompt(
+            automatic_evidence=automatic_evidence,
+            command=command,
+            deeplink_url=deeplink_url,
+        )
+        if hashlib.sha256(expected_prompt.encode("utf-8")).hexdigest() != prompt_digest:
+            raise ModelError("Recovery prompt digest does not match its recorded content.")
+    elif automatic_evidence or prompted_at_utc or prompt_digest:
+        raise ModelError("Unprompted recovery must not claim prompt evidence.")
+
+    if mode == "EVIDENCE":
+        if not complete or provenance not in {"automatic", "user_supplied"}:
+            raise ModelError(
+                "EVIDENCE mode requires a complete physical QueryPlan from automatic or user-supplied evidence."
+            )
+        if outcome != "accepted":
+            raise ModelError("EVIDENCE mode requires an accepted physical QueryPlan.")
+        if provenance == "automatic":
+            if (
+                required
+                or prompted
+                or command
+                or deeplink_status != "not_needed"
+                or deeplink_url
+                or deficiency
+                or automatic_evidence
+            ):
+                raise ModelError(
+                    "Automatic complete physical QueryPlan evidence must skip user recovery."
+                )
+        else:
+            if not required or not prompted:
+                raise ModelError(
+                    "User-supplied physical QueryPlan evidence must record the recovery prompt."
+                )
+            if "user" not in plan["tool"].lower() or "non-executing" not in plan["tool"].lower():
+                raise ModelError(
+                    "User-supplied evidence tool must identify user-supplied non-executing provenance."
+                )
+            if command != expected_command:
+                raise ModelError(
+                    "User-supplied recovery command must preserve the exact query."
+                )
+            if deeplink_status not in {"generated", "failed", "unavailable"}:
+                raise ModelError("User-supplied recovery must record a deeplink attempt.")
+            if deeplink_status == "generated":
+                parsed = urlparse(deeplink_url)
+                if parsed.scheme != "https" or not parsed.netloc:
+                    raise ModelError(
+                        "Generated recovery deeplink must be an absolute HTTPS URI."
+                    )
+            elif deeplink_url:
+                raise ModelError(
+                    "Failed or unavailable deeplink recovery must not claim a URL."
+                )
+            if not deficiency:
+                raise ModelError(
+                    "User-supplied recovery must record the automatic QueryPlan deficiency."
+                )
+            if not automatic_evidence:
+                raise ModelError(
+                    "User-supplied recovery must record the automatic evidence found."
+                )
+    else:
+        allowed_outcomes = {
+            "user_declined",
+            "user_could_not_provide",
+            "user_chose_after_rejection",
+        }
+        if complete or provenance != "estimated_after_recovery":
+            raise ModelError(
+                "ESTIMATED mode requires missing complete physical QueryPlan evidence after recovery."
+            )
+        if not required or not prompted:
+            raise ModelError(
+                "ESTIMATED mode is forbidden until physical QueryPlan recovery was prompted."
+            )
+        if command != expected_command:
+            raise ModelError(
+                "Recovery command must preserve the exact query in '.show queryplan <|' syntax."
+            )
+        if outcome not in allowed_outcomes:
+            raise ModelError(
+                "ESTIMATED mode requires an explicit user decline, inability, or choice after rejection."
+            )
+        if deeplink_status not in {"generated", "failed", "unavailable"}:
+            raise ModelError("Recovery must record the deeplink generation attempt.")
+        if deeplink_status == "generated":
+            parsed = urlparse(deeplink_url)
+            if parsed.scheme != "https" or not parsed.netloc:
+                raise ModelError("Generated recovery deeplink must be an absolute HTTPS URI.")
+        elif deeplink_url:
+            raise ModelError("Failed or unavailable deeplink recovery must not claim a URL.")
+        if not deficiency:
+            raise ModelError("ESTIMATED recovery must name the missing physical QueryPlan artifact.")
+        if not automatic_evidence:
+            raise ModelError("ESTIMATED recovery must record the automatic evidence found.")
+
+
 def validate_complete_model(model: dict[str, Any]) -> None:
     root_keys = (
         "schema_version",
@@ -1660,6 +1937,16 @@ def validate_complete_model(model: dict[str, Any]) -> None:
     )
     if mode == "EVIDENCE" and estimate_reason:
         raise ModelError("model.estimate_reason must be empty in EVIDENCE mode.")
+    if mode == "ESTIMATED" and (
+        "queryplan" not in estimate_reason.lower()
+        or not any(
+            term in estimate_reason.lower()
+            for term in ("declined", "could not", "unusable", "rejected", "chose")
+        )
+    ):
+        raise ModelError(
+            "model.estimate_reason must record the missing QueryPlan and explicit recovery outcome."
+        )
 
     query = _shape(
         model["query"],
@@ -1689,17 +1976,45 @@ def validate_complete_model(model: dict[str, Any]) -> None:
 
     plan = _shape(
         model["plan"],
-        ("tool", "collected_at_utc", "non_executing", "digest_sha256", "operator_count"),
+        (
+            "tool",
+            "collected_at_utc",
+            "non_executing",
+            "digest_sha256",
+            "sanitized_digest_sha256",
+            "sanitized_queryplan",
+            "operator_count",
+            "complete_physical_queryplan",
+            "provenance",
+            "recovery",
+        ),
         "model.plan",
     )
     _text(plan["tool"], "model.plan.tool")
-    _text(plan["collected_at_utc"], "model.plan.collected_at_utc")
+    collected_at_utc = _text(
+        plan["collected_at_utc"], "model.plan.collected_at_utc"
+    )
+    if not is_utc_timestamp(collected_at_utc):
+        raise ModelError("model.plan.collected_at_utc must be a valid UTC RFC 3339 timestamp.")
     if plan["non_executing"] is not True:
         raise ModelError("model.plan.non_executing must be exactly true.")
     digest = _text(plan["digest_sha256"], "model.plan.digest_sha256", allow_empty=True)
+    sanitized_digest = _text(
+        plan["sanitized_digest_sha256"],
+        "model.plan.sanitized_digest_sha256",
+        allow_empty=(mode == "ESTIMATED"),
+    )
     if mode == "EVIDENCE" and not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ModelError("EVIDENCE mode requires a SHA-256 plan digest.")
+    if mode == "EVIDENCE" and not re.fullmatch(r"[0-9a-f]{64}", sanitized_digest):
+        raise ModelError("EVIDENCE mode requires a sanitized QueryPlan SHA-256 digest.")
+    if mode == "ESTIMATED" and sanitized_digest:
+        raise ModelError("ESTIMATED mode must not claim a sanitized physical QueryPlan digest.")
+    _validate_plan_recovery(plan, query["text"], mode)
     plan_count = _integer(plan["operator_count"], "model.plan.operator_count", minimum=1)
+    plan_topology = _validate_sanitized_queryplan(
+        plan["sanitized_queryplan"], mode, sanitized_digest, plan_count
+    )
 
     stages = _list(model["stages"], "model.stages")
     if len(stages) != len(STAGES):
@@ -1773,6 +2088,7 @@ def validate_complete_model(model: dict[str, Any]) -> None:
                 expected_id,
                 stage_no_op,
                 plan_count,
+                plan_topology,
                 mode,
                 head,
                 project,

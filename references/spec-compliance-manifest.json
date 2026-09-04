@@ -5,6 +5,19 @@
   "acceptance_item_count": 93,
   "automated_count": 93,
   "manual_count": 0,
+  "workflow_extensions": [
+    {
+      "id": "WE-PHYSICAL-QUERYPLAN-RECOVERY",
+      "scope": "pre-render evidence acquisition",
+      "reason": "Require a user-assisted recovery attempt before ESTIMATED fallback when automatic evidence lacks a complete physical QueryPlan.",
+      "implementation": [
+        "scripts/plan_recovery.py",
+        "scripts/model_contract.py",
+        "references/evidence-collection.md"
+      ],
+      "canonical_spec_impact": "none"
+    }
+  ],
   "parameterizations": [
     {
       "item_id": "AC-A2326BC5E437D8D5",

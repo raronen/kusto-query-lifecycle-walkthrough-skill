@@ -149,6 +149,7 @@ finally {
     Ok = $true
     HtmlPath = $renderResult.html_path
     EvidenceMode = $renderResult.evidence_mode
+    PlanProvenance = $renderResult.plan_provenance
     Compliance = $renderResult.compliance
     BookmarkStatus = $bookmarkStatus
     BookmarkError = $bookmarkError

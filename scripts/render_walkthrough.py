@@ -92,6 +92,7 @@ def main() -> int:
                 "title": model["query"]["title"],
                 "slug": model["query"]["slug"],
                 "evidence_mode": model["evidence_mode"],
+                "plan_provenance": model["plan"]["provenance"],
                 "compliance": compliance,
             }
         )

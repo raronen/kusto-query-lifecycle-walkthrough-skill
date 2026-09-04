@@ -219,6 +219,117 @@
       "items": false
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "model_state": { "const": "COMPLETE" },
+          "evidence_mode": { "const": "EVIDENCE" }
+        },
+        "required": ["model_state", "evidence_mode"]
+      },
+      "then": {
+        "properties": {
+          "estimate_reason": { "const": "" },
+          "plan": {
+            "properties": {
+              "complete_physical_queryplan": { "const": true },
+              "provenance": { "enum": ["automatic", "user_supplied"] },
+              "collected_at_utc": {
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "digest_sha256": { "pattern": "^[0-9a-f]{64}$" },
+              "sanitized_digest_sha256": { "pattern": "^[0-9a-f]{64}$" },
+              "sanitized_queryplan": {
+                "type": "object",
+                "required": ["RootOperator"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "model_state": { "const": "COMPLETE" },
+          "evidence_mode": { "const": "ESTIMATED" }
+        },
+        "required": ["model_state", "evidence_mode"]
+      },
+      "then": {
+        "properties": {
+          "estimate_reason": { "minLength": 1 },
+          "plan": {
+            "properties": {
+              "complete_physical_queryplan": { "const": false },
+              "provenance": { "const": "estimated_after_recovery" },
+              "sanitized_queryplan": { "const": {} },
+              "collected_at_utc": {
+                "format": "date-time",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+              },
+              "sanitized_digest_sha256": { "const": "" },
+              "recovery": {
+                "properties": {
+                  "required": { "const": true },
+                  "prompted": { "const": true },
+                  "command": {
+                    "pattern": "^\\.show queryplan <\\|\\n[\\s\\S]+$"
+                  },
+                  "deeplink_status": {
+                    "enum": ["generated", "failed", "unavailable"]
+                  },
+                  "outcome": {
+                    "enum": [
+                      "user_declined",
+                      "user_could_not_provide",
+                      "user_chose_after_rejection"
+                    ]
+                  },
+                  "deficiency": { "minLength": 1 },
+                  "automatic_evidence": { "minLength": 1 },
+                  "prompted_at_utc": { "minLength": 1 },
+                  "prompt_digest_sha256": { "pattern": "^[0-9a-f]{64}$" }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "deeplink_status": { "const": "generated" }
+                      },
+                      "required": ["deeplink_status"]
+                    },
+                    "then": {
+                      "properties": {
+                        "deeplink_url": {
+                          "pattern": "^https://[^/?#]+(?:[/?#].*)?$"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "deeplink_status": {
+                          "enum": ["failed", "unavailable"]
+                        }
+                      },
+                      "required": ["deeplink_status"]
+                    },
+                    "then": {
+                      "properties": { "deeplink_url": { "const": "" } }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "identifier": {
       "type": "string",
@@ -269,13 +380,182 @@
     "plan": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["tool", "collected_at_utc", "non_executing", "digest_sha256", "operator_count"],
+      "required": [
+        "tool",
+        "collected_at_utc",
+        "non_executing",
+        "digest_sha256",
+        "sanitized_digest_sha256",
+        "sanitized_queryplan",
+        "operator_count",
+        "complete_physical_queryplan",
+        "provenance",
+        "recovery"
+      ],
       "properties": {
         "tool": { "type": "string" },
-        "collected_at_utc": { "type": "string" },
+        "collected_at_utc": {
+          "type": "string",
+          "anyOf": [
+            { "const": "" },
+            {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+            }
+          ]
+        },
         "non_executing": { "const": true },
         "digest_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
-        "operator_count": { "type": "integer", "minimum": 0 }
+        "sanitized_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "sanitized_queryplan": { "type": "object" },
+        "operator_count": { "type": "integer", "minimum": 0 },
+        "complete_physical_queryplan": { "type": "boolean" },
+        "provenance": {
+          "enum": ["pending", "automatic", "user_supplied", "estimated_after_recovery"]
+        },
+        "recovery": { "$ref": "#/$defs/planRecovery" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provenance": { "const": "automatic" } },
+            "required": ["provenance"]
+          },
+          "then": {
+            "properties": {
+              "recovery": {
+                "properties": {
+                  "required": { "const": false },
+                  "prompted": { "const": false },
+                  "command": { "const": "" },
+                  "deeplink_status": { "const": "not_needed" },
+                  "deeplink_url": { "const": "" },
+                  "outcome": { "const": "accepted" },
+                  "deficiency": { "const": "" },
+                  "automatic_evidence": { "const": "" },
+                  "prompted_at_utc": { "const": "" },
+                  "prompt_digest_sha256": { "const": "" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "provenance": { "const": "user_supplied" } },
+            "required": ["provenance"]
+          },
+          "then": {
+            "properties": {
+              "recovery": {
+                "properties": {
+                  "required": { "const": true },
+                  "prompted": { "const": true },
+                  "outcome": { "const": "accepted" },
+                  "command": {
+                    "pattern": "^\\.show queryplan <\\|\\n[\\s\\S]+$"
+                  },
+                  "deeplink_status": {
+                    "enum": ["generated", "failed", "unavailable"]
+                  },
+                  "deficiency": { "minLength": 1 },
+                  "automatic_evidence": { "minLength": 1 },
+                  "prompted_at_utc": { "minLength": 1 },
+                  "prompt_digest_sha256": { "pattern": "^[0-9a-f]{64}$" }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "deeplink_status": { "const": "generated" }
+                      },
+                      "required": ["deeplink_status"]
+                    },
+                    "then": {
+                      "properties": {
+                        "deeplink_url": {
+                          "pattern": "^https://[^/?#]+(?:[/?#].*)?$"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "if": {
+                      "properties": {
+                        "deeplink_status": {
+                          "enum": ["failed", "unavailable"]
+                        }
+                      },
+                      "required": ["deeplink_status"]
+                    },
+                    "then": {
+                      "properties": { "deeplink_url": { "const": "" } }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "planRecovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "prompted",
+        "command",
+        "deeplink_status",
+        "deeplink_url",
+        "outcome",
+        "deficiency",
+        "automatic_evidence",
+        "prompted_at_utc",
+        "prompt_digest_sha256"
+      ],
+      "properties": {
+        "required": { "type": "boolean" },
+        "prompted": { "type": "boolean" },
+        "command": { "type": "string" },
+        "deeplink_status": {
+          "enum": [
+            "not_attempted",
+            "not_needed",
+            "generated",
+            "failed",
+            "unavailable"
+          ]
+        },
+        "deeplink_url": { "type": "string" },
+        "outcome": {
+          "enum": [
+            "pending",
+            "accepted",
+            "user_declined",
+            "user_could_not_provide",
+            "user_chose_after_rejection"
+          ]
+        },
+        "deficiency": { "type": "string" },
+        "automatic_evidence": { "type": "string" },
+        "prompted_at_utc": {
+          "type": "string",
+          "anyOf": [
+            { "const": "" },
+            {
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?Z$"
+            }
+          ]
+        },
+        "prompt_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        }
       }
     },
     "networkBeacon": {

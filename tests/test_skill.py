@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 import shutil
@@ -11,6 +12,8 @@ import unittest
 import zipfile
 from pathlib import Path
 from urllib.parse import urlencode
+
+from jsonschema import Draft202012Validator, FormatChecker
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +29,17 @@ from model_contract import (
     query_slug,
     validate_cluster_uri,
     validate_complete_model,
+    _validate_plan_recovery,
+)
+from plan_recovery import (
+    PlanRecoveryError,
+    accepted_recovery,
+    build_queryplan_command,
+    build_recovery_prompt,
+    estimated_recovery,
+    inspect_queryplan_payload,
+    pending_recovery,
+    record_recovery_prompt,
 )
 from render_walkthrough import render
 
@@ -116,6 +130,439 @@ def retarget_model(model: dict, head: str) -> dict:
 
 
 class ContractTests(unittest.TestCase):
+    @staticmethod
+    def physical_queryplan() -> dict:
+        return {
+            "QueryPlan": {
+                "RootOperator": {
+                    "NodeId": 0,
+                    "Operators": [
+                        {
+                            "$type": "Kusto.DataNode.DataEngineQueryPlan.HashJoin, DataNode",
+                            "NodeId": 1,
+                            "Build": {
+                                "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                                "NodeId": 2,
+                            },
+                            "Probe": {
+                                "$type": "Kusto.DataNode.DataEngineQueryPlan.RemoteQueryNode, DataNode",
+                                "NodeId": 3,
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+
+    def test_queryplan_wrapper_preserves_exact_query_and_is_plan_only(self) -> None:
+        query = "let x = 1;\r\nSyntheticEvents\r\n| where Message == '<| literal'\r\n"
+        command = build_queryplan_command(query)
+        self.assertEqual(command, f".show queryplan <|\n{query}")
+        self.assertEqual(command.removeprefix(".show queryplan <|\n"), query)
+        self.assertNotIn("| project QueryPlan", command)
+
+    def test_complete_automatic_queryplan_skips_recovery_prompt(self) -> None:
+        payload = json.dumps(self.physical_queryplan())
+        result = inspect_queryplan_payload(payload)
+        plan = accepted_recovery(
+            payload,
+            provenance="automatic",
+            tool="synthetic non-executing automatic plan",
+            collected_at_utc="2026-01-01T00:00:00Z",
+        )
+        self.assertTrue(plan["complete_physical_queryplan"])
+        self.assertFalse(plan["recovery"]["required"])
+        self.assertFalse(plan["recovery"]["prompted"])
+        self.assertEqual(plan["recovery"]["deeplink_status"], "not_needed")
+
+    def test_queryplan_table_envelope_and_raw_digest_are_supported(self) -> None:
+        cell = json.dumps(
+            {
+                "RootOperator": {
+                    "NodeId": 0,
+                    "Operators": [
+                        {
+                            "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                            "NodeId": 1,
+                        }
+                    ],
+                }
+            },
+            separators=(",", ":"),
+        )
+        raw = json.dumps(
+            {
+                "Tables": [
+                    {
+                        "Columns": [
+                            {"ColumnName": "QueryPlan"},
+                            {"ColumnName": "Other"},
+                        ],
+                        "Rows": [[cell, 1]],
+                    }
+                ]
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+        result = inspect_queryplan_payload(raw)
+        self.assertEqual(result["operator_count"], 1)
+        self.assertEqual(result["digest_sha256"], hashlib.sha256(raw).hexdigest())
+        result_type_envelope = {
+            "Rows": [{"ResultType": "QueryPlan", "Content": cell}]
+        }
+        self.assertEqual(
+            inspect_queryplan_payload(json.dumps(result_type_envelope))["operator_count"], 1
+        )
+
+    def test_logical_only_and_missing_queryplan_require_recovery(self) -> None:
+        for payload, message in (
+            ({"Relop": {"Kind": "Logical"}}, "logical Relop"),
+            ({"Rows": [{"Statistics": {}}]}, "no QueryPlan"),
+        ):
+            with self.subTest(payload=payload), self.assertRaisesRegex(
+                PlanRecoveryError, message
+            ):
+                inspect_queryplan_payload(json.dumps(payload))
+        state = pending_recovery(
+            QUERY, automatic_deficiency="Logical Relop found; complete QueryPlan missing."
+        )
+        self.assertTrue(state["recovery"]["required"])
+        self.assertFalse(state["recovery"]["prompted"])
+        self.assertEqual(
+            state["recovery"]["command"], build_queryplan_command(QUERY)
+        )
+
+    def test_deeplink_failure_still_produces_exact_command_and_prompt(self) -> None:
+        command = build_queryplan_command(QUERY)
+        prompt = build_recovery_prompt(
+            automatic_evidence="logical Relop and statistics only",
+            command=command,
+        )
+        self.assertIn("complete physical QueryPlan", prompt)
+        self.assertIn(command, prompt)
+        self.assertIn("deeplink could not be generated", prompt)
+        self.assertIn("QueryPlan result cell/JSON", prompt)
+        self.assertIn("attach it", prompt)
+
+    def test_user_supplied_complete_queryplan_upgrades_evidence_and_redacts(self) -> None:
+        raw = json.dumps(
+            {
+                "QueryPlan": {
+                    "RequestId": "sensitive-request",
+                    "RootOperator": {
+                        "NodeId": 0,
+                        "Operators": [
+                            {
+                                "$type": "Kusto.DataNode.DataEngineQueryPlan.HashJoin, DataNode",
+                                "NodeId": 1,
+                                "Properties": [
+                                    {
+                                        "Name": "Literal",
+                                        "Value": "customer@example.test",
+                                    }
+                                ],
+                                "Build": {
+                                    "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                                    "NodeId": 2,
+                                    "AuthorizationValue": "secret",
+                                },
+                                "Probe": {
+                                    "$type": "Kusto.DataNode.DataEngineQueryPlan.RemoteQueryNode, DataNode",
+                                    "NodeId": 3,
+                                },
+                            }
+                        ],
+                    },
+                }
+            }
+        )
+        result = inspect_queryplan_payload(raw)
+        self.assertEqual(result["operator_count"], 3)
+        sanitized = json.dumps(result["sanitized_queryplan"])
+        self.assertNotIn("sensitive-request", sanitized)
+        self.assertNotIn("customer@example.test", sanitized)
+        self.assertNotIn('"secret"', sanitized)
+        prompt_record = record_recovery_prompt(
+            QUERY,
+            automatic_evidence="Automatic collection returned logical Relop and statistics.",
+            automatic_deficiency="Automatic result contained only logical Relop.",
+            deeplink_status="failed",
+            prompted_at_utc="2026-01-01T00:00:00Z",
+        )
+        plan = accepted_recovery(
+            raw,
+            provenance="user_supplied",
+            tool="user-supplied non-executing QueryPlan cell",
+            collected_at_utc="2026-01-01T00:00:00Z",
+            prompt_record=prompt_record,
+        )
+        self.assertTrue(plan["recovery"]["prompted"])
+        _validate_plan_recovery(plan, QUERY, "EVIDENCE")
+
+    def test_invalid_or_incomplete_queryplan_is_rejected(self) -> None:
+        with self.assertRaisesRegex(PlanRecoveryError, "exact original JSON bytes"):
+            inspect_queryplan_payload(self.physical_queryplan())
+        cases = (
+            ("", "empty"),
+            ("not-json", "valid JSON"),
+            (json.dumps({"QueryPlan": {"Kind": "Logical"}}), "RootOperator"),
+            (json.dumps({"replotree": {"relop": "Scan"}}), "logical Relop"),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [{"$type": "AnythingAtAll", "NodeId": 1}],
+                            }
+                        }
+                    }
+                ),
+                "source-backed physical QueryPlan type",
+            ),
+            (json.dumps({"QueryPlan": {"RootOperator": {"Operators": []}}}), "NodeId"),
+            (
+                json.dumps(
+                    {
+                        "IsTruncated": True,
+                        "QueryPlan": self.physical_queryplan()["QueryPlan"],
+                    }
+                ),
+                "truncated",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "IsTruncated": True,
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                                        "NodeId": 1,
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "truncated",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "IsTruncated": "true",
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                                        "NodeId": 1,
+                                    }
+                                ],
+                            },
+                        }
+                    }
+                ),
+                "must be boolean",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.HashJoin, DataNode",
+                                        "NodeId": 1,
+                                        "Build": {"NodeId": 2},
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "complete physical operator payload",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.HashJoin, DataNode",
+                                        "NodeId": 1,
+                                        "UnexpectedLane": {
+                                            "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                                            "NodeId": 2,
+                                        },
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "unknown child lane",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.IteratorScan, DataNode",
+                                        "NodeId": 1,
+                                    },
+                                    {},
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "not a complete physical operator",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.HashJoin, DataNode",
+                                        "NodeId": 1,
+                                        "Build": {},
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "complete physical operator payload",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.HashJoin, DataNode",
+                                        "NodeId": 1,
+                                        "Build": "truncated",
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "complete physical operator payload",
+            ),
+            (
+                json.dumps(
+                    {
+                        "QueryPlan": {
+                            "RootOperator": {
+                                "NodeId": 0,
+                                "Operators": [
+                                    {
+                                        "$type": "Kusto.DataNode.DataEngineQueryPlan.LogicalRelop, DataNode",
+                                        "NodeId": 1,
+                                    }
+                                ],
+                            }
+                        }
+                    }
+                ),
+                "logical rather than physical",
+            ),
+        )
+        for payload, deficiency in cases:
+            with self.subTest(deficiency=deficiency), self.assertRaisesRegex(
+                PlanRecoveryError, deficiency
+            ):
+                inspect_queryplan_payload(payload)
+
+    def test_estimated_requires_explicit_user_outcome_and_records_provenance(self) -> None:
+        prompt_record = record_recovery_prompt(
+            QUERY,
+            automatic_evidence="Automatic collection returned logical Relop only.",
+            automatic_deficiency="Complete physical QueryPlan cell missing.",
+            deeplink_status="failed",
+            prompted_at_utc="2026-01-01T00:00:00Z",
+        )
+        plan = estimated_recovery(
+            prompt_record,
+            outcome="user_could_not_provide",
+        )
+        _validate_plan_recovery(plan, QUERY, "ESTIMATED")
+        silent = copy.deepcopy(plan)
+        silent["recovery"]["prompted"] = False
+        with self.assertRaisesRegex(ModelError, "Unprompted recovery"):
+            _validate_plan_recovery(silent, QUERY, "ESTIMATED")
+        with self.assertRaisesRegex(PlanRecoveryError, "recorded recovery prompt"):
+            estimated_recovery({}, outcome="user_declined")
+        with self.assertRaisesRegex(PlanRecoveryError, "Collection timestamp"):
+            accepted_recovery(
+                json.dumps(self.physical_queryplan()),
+                provenance="automatic",
+                tool="automatic non-executing plan",
+                collected_at_utc="not-a-time",
+            )
+        with self.assertRaisesRegex(PlanRecoveryError, "UTC RFC 3339"):
+            record_recovery_prompt(
+                QUERY,
+                automatic_evidence="Logical Relop only.",
+                automatic_deficiency="QueryPlan missing.",
+                deeplink_status="failed",
+                prompted_at_utc="2026-02-30T99:00:00Z",
+            )
+
+        model = rich_model()
+        model["evidence_mode"] = "ESTIMATED"
+        model["estimate_reason"] = (
+            "The complete physical QueryPlan was unavailable and the user could not provide it "
+            "after the recovery prompt."
+        )
+        model["plan"].update(plan)
+        for stage in model["stages"]:
+            if stage["evidence_kind"] == "NO_OP":
+                continue
+            stage["evidence_kind"] = "ESTIMATED"
+            stage["no_op_explanation"] = ""
+            for substep in stage["substeps"]:
+                if substep["change_badge"] == "NO_OP":
+                    continue
+                substep["change_badge"] = "ESTIMATED"
+                if substep["artifact"]["before"] == substep["artifact"]["after"]:
+                    substep["artifact"]["after"] += " (estimated)"
+                runner = substep.get("runner")
+                if not runner:
+                    continue
+                runner["no_op"] = {"enabled": False, "gates": [], "reasons": []}
+                for action in runner["actions"]:
+                    action["evidence_kind"] = "ESTIMATED"
+                if runner["type"] == "compiler":
+                    for action in (
+                        runner["compiler"]["before_actions"]
+                        + runner["compiler"]["after_actions"]
+                    ):
+                        action["evidence_kind"] = "ESTIMATED"
+                elif runner["type"] == "pass":
+                    for pass_item in runner["pass"]["applicable_passes"]:
+                        pass_item["outcome"] = "ESTIMATED"
+                elif runner["type"] == "physical":
+                    runner["physical"]["full_plan"]["complete"] = False
+        validate_complete_model(model)
+
     def test_cluster_uri_accepts_https_and_loopback_http(self) -> None:
         for uri in (
             "https://example.kusto.windows.net",
@@ -164,6 +611,10 @@ class ContractTests(unittest.TestCase):
 
     def test_rich_v2_model_validates(self) -> None:
         validate_complete_model(rich_model())
+        invalid = rich_model()
+        invalid["plan"]["collected_at_utc"] = "2026-02-30T99:00:00Z"
+        with self.assertRaisesRegex(ModelError, "valid UTC RFC 3339"):
+            validate_complete_model(invalid)
 
     def test_canonical_substeps_have_exact_runner_topology_and_distinct_states(self) -> None:
         model = rich_model()
@@ -317,6 +768,27 @@ class ContractTests(unittest.TestCase):
         component = model["stages"][9]["substeps"][0]["runner"]["execute"]["components"][0]
         component["evidence_ref"] = "absent-op"
         with self.assertRaisesRegex(ModelError, "absent from this walkthrough"):
+            validate_complete_model(model)
+
+    def test_physical_tree_must_match_sanitized_queryplan_topology(self) -> None:
+        model = rich_model()
+        physical = model["stages"][7]["substeps"][0]["runner"]["physical"]["full_plan"]
+        physical["roots"][0]["name"] = "IteratorScan"
+        with self.assertRaisesRegex(ModelError, "topology does not match"):
+            validate_complete_model(model)
+
+        model = rich_model()
+        model["plan"]["sanitized_queryplan"]["RootOperator"]["Operators"][0][
+            "Build"
+        ]["NodeId"] = 99
+        canonical = json.dumps(
+            model["plan"]["sanitized_queryplan"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        model["plan"]["sanitized_digest_sha256"] = hashlib.sha256(canonical).hexdigest()
+        with self.assertRaisesRegex(ModelError, "topology does not match"):
             validate_complete_model(model)
 
     def test_execute_stack_components_and_scenarios_are_strict(self) -> None:
@@ -577,7 +1049,14 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(draft["model_state"], "DRAFT")
         self.assertEqual(len(draft["stages"]), 10)
         self.assertIs(draft["plan"]["non_executing"], True)
-        self.assertEqual(draft["query"]["text"], QUERY)
+        fixture_query = (ROOT / "tests" / "fixtures" / "synthetic-query.kql").read_bytes().decode(
+            "utf-8"
+        )
+        self.assertEqual(draft["query"]["text"], fixture_query)
+        self.assertEqual(
+            draft["plan"]["recovery"]["command"],
+            f".show queryplan <|\n{fixture_query}",
+        )
         self.assertEqual(draft["source"]["workspace_head"], self.source_head)
         self.assertEqual(sum(len(stage["substeps"]) for stage in draft["stages"]), 45)
         for stage, expected_stage in zip(draft["stages"], CANONICAL_SUBSTEPS, strict=True):
@@ -600,6 +1079,36 @@ class ScriptTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("loopback", rejected.stderr)
 
+    def test_plan_recovery_cli_records_a_deterministic_prompt(self) -> None:
+        query_path = ROOT / "tests" / "fixtures" / "synthetic-query.kql"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPTS / "plan_recovery.py"),
+                "--query-file",
+                str(query_path),
+                "--record-prompt",
+                "--automatic-evidence",
+                "Logical Relop and statistics only.",
+                "--automatic-deficiency",
+                "Complete physical QueryPlan missing.",
+                "--deeplink-status",
+                "failed",
+                "--prompted-at-utc",
+                "2026-01-01T00:00:00Z",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        exact_query = query_path.read_bytes().decode("utf-8")
+        self.assertEqual(
+            payload["recovery"]["command"], f".show queryplan <|\n{exact_query}"
+        )
+        self.assertIn("complete physical QueryPlan", payload["prompt"])
+        self.assertRegex(payload["recovery"]["prompt_digest_sha256"], r"^[0-9a-f]{64}$")
+
     def test_packager_builds_deterministic_skill_archive(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "first.skill"
@@ -616,6 +1125,7 @@ class ScriptTests(unittest.TestCase):
                 names = archive.namelist()
             self.assertIn("references/feature-parity-contract.md", names)
             self.assertIn("references/feature-parity-inventory.json", names)
+            self.assertIn("scripts/plan_recovery.py", names)
             self.assertNotIn("README.md", names)
             self.assertNotIn("CHANGELOG.md", names)
 
@@ -735,6 +1245,57 @@ class ScriptTests(unittest.TestCase):
             "breakpoint",
         ):
             self.assertIn(field, component_required)
+
+    def test_json_schema_enforces_complete_recovery_states(self) -> None:
+        schema = json.loads(
+            (ROOT / "references" / "evidence-model.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema, format_checker=FormatChecker())
+        model = rich_model()
+        self.assertEqual(list(validator.iter_errors(model)), [])
+
+        invalid = copy.deepcopy(model)
+        invalid["plan"]["provenance"] = "estimated_after_recovery"
+        invalid["plan"]["complete_physical_queryplan"] = False
+        self.assertTrue(list(validator.iter_errors(invalid)))
+
+        invalid = copy.deepcopy(model)
+        invalid["plan"]["provenance"] = "user_supplied"
+        invalid["plan"]["recovery"]["prompted"] = False
+        self.assertTrue(list(validator.iter_errors(invalid)))
+
+        prompt_record = record_recovery_prompt(
+            QUERY,
+            automatic_evidence="Logical Relop only.",
+            automatic_deficiency="Complete QueryPlan missing.",
+            deeplink_status="generated",
+            deeplink_url="https://dataexplorer.azure.com/clusters/example",
+            prompted_at_utc="2026-01-01T00:00:00Z",
+        )
+        recovered = copy.deepcopy(model)
+        recovered["plan"]["provenance"] = "user_supplied"
+        recovered["plan"]["tool"] = "user-supplied non-executing QueryPlan cell"
+        recovered["plan"]["recovery"] = {
+            **prompt_record,
+            "outcome": "accepted",
+        }
+        self.assertEqual(list(validator.iter_errors(recovered)), [])
+
+        invalid = copy.deepcopy(recovered)
+        invalid["plan"]["recovery"]["command"] = ""
+        self.assertTrue(list(validator.iter_errors(invalid)))
+        invalid = copy.deepcopy(recovered)
+        invalid["plan"]["recovery"]["deeplink_url"] = ""
+        self.assertTrue(list(validator.iter_errors(invalid)))
+        estimated_pattern = schema["allOf"][1]["then"]["properties"]["plan"][
+            "properties"
+        ]["recovery"]["properties"]["command"]["pattern"]
+        self.assertIsNotNone(
+            re.fullmatch(estimated_pattern, ".show queryplan <|\n\nSyntheticEvents")
+        )
 
     def test_schema_cluster_uri_patterns_cover_only_https_or_loopback_http(self) -> None:
         schema = json.loads(
