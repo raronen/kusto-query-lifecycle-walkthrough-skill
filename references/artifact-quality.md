@@ -28,5 +28,8 @@ The output path is:
 <Documents>\Bookmarks\<stable-query-derived-slug>\<slug>.html
 ```
 
-Use the OneDrive Documents folder when present, otherwise the local Documents folder. The
-bookmark destination is exactly `Favorites bar → Imported`.
+Use the OneDrive Documents folder when present, otherwise the local Documents folder. After the
+page exists, publication may be attempted best-effort to `Favorites bar → Imported`. The page is
+a successful artifact even when the companion is absent, unsupported, unhealthy, or fails.
+Report `published` only when `CompanionResult.ok` is exactly boolean `true`; otherwise report
+`skipped` or `failed` with the warning. Never preflight, block, ask, or prompt for publication.

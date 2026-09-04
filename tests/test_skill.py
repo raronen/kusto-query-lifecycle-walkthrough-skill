@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,9 @@ from model_contract import (
     validate_complete_model,
 )
 from render_walkthrough import render
+
+
+POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
 
 def create_source_workspace(parent: Path) -> tuple[Path, str]:
@@ -436,6 +440,40 @@ class ScriptTests(unittest.TestCase):
             text=True,
         )
 
+    def run_publish_wrapper(
+        self,
+        directory: Path,
+        publisher_path: Path,
+        publisher_timeout_seconds: int = 5,
+    ) -> tuple[subprocess.CompletedProcess[str], dict]:
+        if POWERSHELL is None:
+            self.skipTest("PowerShell is unavailable")
+        model_path = directory / "model.json"
+        output_path = directory / "walkthrough.html"
+        model_path.write_text(
+            json.dumps(retarget_model(rich_model(), self.source_head)),
+            encoding="utf-8",
+        )
+
+        def quote(value: Path) -> str:
+            return "'" + str(value).replace("'", "''") + "'"
+
+        wrapper = SCRIPTS / "Publish-Walkthrough.ps1"
+        command = (
+            f"& {{ & {quote(wrapper)} -ModelPath {quote(model_path)} "
+            f"-SourceWorkspace {quote(self.source_workspace)} "
+            f"-PublisherPath {quote(publisher_path)} -OutputPath {quote(output_path)} "
+            f"-PublisherTimeoutSeconds {publisher_timeout_seconds} "
+            "| ConvertTo-Json -Depth 10 -Compress }"
+        )
+        result = subprocess.run(
+            [POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", command],
+            capture_output=True,
+            text=True,
+        )
+        payload = json.loads(result.stdout) if result.returncode == 0 else {}
+        return result, payload
+
     def test_scaffolder_creates_v2_draft_with_mandatory_runners(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "draft.json"
@@ -486,11 +524,91 @@ class ScriptTests(unittest.TestCase):
             self.assertNotIn("README.md", names)
             self.assertNotIn("CHANGELOG.md", names)
 
-    def test_publish_wrapper_requires_exact_companion_success(self) -> None:
+    def test_publish_wrapper_is_noninteractive_and_has_no_companion_preflight(self) -> None:
         text = (SCRIPTS / "Publish-Walkthrough.ps1").read_text(encoding="utf-8")
-        self.assertIn("$companionOk -isnot [bool] -or -not $companionOk", text)
+        self.assertNotRegex(text, r"(?i)Read-Host|PromptForChoice|ShouldContinue|preflight")
+        self.assertLess(text.index("& python @arguments"), text.index("Test-Path -LiteralPath $PublisherPath"))
+        self.assertLess(text.index("try {", text.index("$driverPath = $null")), text.index("Test-Path -LiteralPath $PublisherPath"))
+        self.assertNotIn("Join-Path $env:USERPROFILE", text)
+        self.assertLess(text.index("try {", text.index("$driverPath = $null")), text.index("GetFolderPath"))
+        self.assertIn("catch {", text)
+        self.assertNotIn("ReadToEnd", text)
+        self.assertIn("StandardOutput.BaseStream.CopyToAsync([IO.Stream]::Null)", text)
+        self.assertIn("StandardError.BaseStream.CopyToAsync([IO.Stream]::Null)", text)
+        self.assertIn("$process.Kill($true)", text)
+        self.assertIn("Ok = $true", text)
+        self.assertIn("BookmarkStatus = $bookmarkStatus", text)
+        self.assertIn("BookmarkError = $bookmarkError", text)
         self.assertIn("@('Favorites bar', 'Imported')", text)
-        self.assertNotIn("$OutputRoot", text)
+
+    def test_publish_wrapper_succeeds_when_publisher_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result, payload = self.run_publish_wrapper(root, root / "missing-publisher.ps1")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIs(payload["Ok"], True)
+            self.assertEqual(payload["BookmarkStatus"], "skipped")
+            self.assertIn("was not found", payload["BookmarkError"])
+            self.assertTrue(Path(payload["HtmlPath"]).is_file())
+            self.assertIsNone(payload["CompanionResult"])
+
+    def test_publish_wrapper_preserves_html_when_publisher_throws(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publisher = root / "failing-publisher.ps1"
+            publisher.write_text("throw 'synthetic companion failure'\n", encoding="utf-8")
+            result, payload = self.run_publish_wrapper(root, publisher)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIs(payload["Ok"], True)
+            self.assertEqual(payload["BookmarkStatus"], "failed")
+            self.assertIn("synthetic companion failure", payload["BookmarkError"])
+            self.assertTrue(Path(payload["HtmlPath"]).is_file())
+
+    def test_publish_wrapper_contains_publisher_exit_and_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            exiting = root / "exiting-publisher.ps1"
+            exiting.write_text("exit 7\n", encoding="utf-8")
+            result, payload = self.run_publish_wrapper(root, exiting)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIs(payload["Ok"], True)
+            self.assertEqual(payload["BookmarkStatus"], "failed")
+            self.assertTrue(Path(payload["HtmlPath"]).is_file())
+
+            hanging = root / "hanging-publisher.ps1"
+            hanging.write_text("Start-Sleep -Seconds 30\n", encoding="utf-8")
+            result, payload = self.run_publish_wrapper(
+                root, hanging, publisher_timeout_seconds=1
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIs(payload["Ok"], True)
+            self.assertEqual(payload["BookmarkStatus"], "failed")
+            self.assertIn("timed out after 1 seconds", payload["BookmarkError"])
+            self.assertTrue(Path(payload["HtmlPath"]).is_file())
+
+    def test_publish_wrapper_requires_exact_true_only_for_published_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            false_publisher = root / "false-publisher.ps1"
+            false_publisher.write_text(
+                "[pscustomobject]@{ CompanionResult = [pscustomobject]@{ ok = 'true' } }\n",
+                encoding="utf-8",
+            )
+            result, payload = self.run_publish_wrapper(root, false_publisher)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIs(payload["Ok"], True)
+            self.assertEqual(payload["BookmarkStatus"], "failed")
+            self.assertIn("exact boolean true", payload["BookmarkError"])
+
+            true_publisher = root / "true-publisher.ps1"
+            true_publisher.write_text(
+                "[pscustomobject]@{ CompanionResult = [pscustomobject]@{ ok = $true } }\n",
+                encoding="utf-8",
+            )
+            result, payload = self.run_publish_wrapper(root, true_publisher)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(payload["BookmarkStatus"], "published")
+            self.assertIsNone(payload["BookmarkError"])
 
     def test_json_schema_enforces_v2_runner_and_experiment_contract(self) -> None:
         schema = json.loads(

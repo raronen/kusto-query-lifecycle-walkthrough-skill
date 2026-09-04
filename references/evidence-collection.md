@@ -49,3 +49,10 @@ Before writing the model:
 - exclude raw logs, request IDs, tenant IDs, tokens, machine paths, and memory addresses;
 - summarize source behavior; link to source instead of copying source text;
 - store the exact query only in the generated local page/model, never in this repository.
+
+## Publication isolation
+
+Evidence collection, model completion, validation, and HTML rendering never depend on bookmark
+companion availability. Do not run a companion preflight or ask the user about publication.
+Only after the valid HTML exists may the publisher be attempted best-effort. Preserve the model
+and HTML and report a bookmark warning when publication is skipped or fails.

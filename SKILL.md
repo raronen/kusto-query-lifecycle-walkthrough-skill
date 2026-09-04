@@ -1,6 +1,6 @@
 ---
 name: kusto-query-lifecycle-walkthrough
-description: Generate an evidence-grounded, interactive Kusto query lifecycle walkthrough from query text, a cluster URI, and a database without executing the query. Uses non-executing query-plan evidence and an authorized local Azure-Kusto-Service workspace, labels source-only fallbacks ESTIMATED, renders all ten lifecycle phases, and publishes the self-contained page through the existing bookmark companion.
+description: Generate an evidence-grounded, interactive Kusto query lifecycle walkthrough from query text, a cluster URI, and a database without executing the query. Uses non-executing query-plan evidence and an authorized local Azure-Kusto-Service workspace, labels source-only fallbacks ESTIMATED, renders all ten lifecycle phases, and optionally attempts best-effort bookmark publication after saving the self-contained page.
 ---
 
 # Kusto Query Lifecycle Walkthrough
@@ -84,7 +84,7 @@ links.
 
 10. Inspect the generated page against
    [references/artifact-quality.md](references/artifact-quality.md).
-11. Publish only through:
+11. After a valid page is rendered and saved, attempt best-effort publication only through:
 
     ```powershell
     .\scripts\Publish-Walkthrough.ps1 `
@@ -92,8 +92,11 @@ links.
       -SourceWorkspace "<Azure-Kusto-Service-workspace>"
     ```
 
-    Success requires `CompanionResult.ok` to be exactly boolean `true`. If rendering or
-    publication fails, preserve the model/page and report the exact failed step.
+    Never perform or require a companion preflight, and never block, ask, or prompt the user
+    about publication. If the publisher is absent, unsupported, unhealthy, or fails, preserve
+    the model/page, continue successfully, and report bookmark status as `skipped` or `failed`
+    with the warning. Declare `published` only when `CompanionResult.ok` is exactly boolean
+    `true`.
 
 ## Completion gate
 
@@ -105,7 +108,7 @@ Do not claim success unless all are true:
 - every operator/action link is absolute, line-specific, and pinned to current workspace HEAD;
 - every one of the ten phases has query-specific substeps and every substep has a validated
   interactive runner;
-- the bookmark publisher ran for that page;
-- `CompanionResult.ok` is exactly `true`.
 
-Final output must include evidence mode, HTML path, bookmark destination, and any limitations.
+Walkthrough success does not depend on bookmark publication. Final output must include evidence
+mode, HTML path, bookmark status (`published`, `skipped`, or `failed`), and any publication
+warning or other limitations.
