@@ -12,6 +12,7 @@
     "query",
     "source",
     "plan",
+    "optimizer_trace",
     "network_beacon",
     "stages"
   ],
@@ -23,6 +24,7 @@
     "query": { "$ref": "#/$defs/query" },
     "source": { "$ref": "#/$defs/source" },
     "plan": { "$ref": "#/$defs/plan" },
+    "optimizer_trace": { "$ref": "#/$defs/optimizerTrace" },
     "network_beacon": { "$ref": "#/$defs/networkBeacon" },
     "stages": {
       "type": "array",
@@ -231,6 +233,13 @@
       "then": {
         "properties": {
           "estimate_reason": { "const": "" },
+          "optimizer_trace": {
+            "properties": {
+              "acquisition": {
+                "properties": { "attempted": { "const": true } }
+              }
+            }
+          },
           "plan": {
             "properties": {
               "complete_physical_queryplan": { "const": true },
@@ -244,6 +253,9 @@
               "sanitized_queryplan": {
                 "type": "object",
                 "required": ["RootOperator"]
+              },
+              "final_relop": {
+                "properties": { "available": { "const": true } }
               }
             }
           }
@@ -261,6 +273,13 @@
       "then": {
         "properties": {
           "estimate_reason": { "minLength": 1 },
+          "optimizer_trace": {
+            "properties": {
+              "acquisition": {
+                "properties": { "attempted": { "const": true } }
+              }
+            }
+          },
           "plan": {
             "properties": {
               "complete_physical_queryplan": { "const": false },
@@ -341,6 +360,8 @@
         "OBSERVED",
         "TRANSFORMED",
         "SCHEDULED_NO_OP",
+        "EXECUTED_OUTCOME_NOT_CAPTURED",
+        "NOT_TRACED",
         "NO_OP",
         "ESTIMATED"
       ]
@@ -387,6 +408,7 @@
         "digest_sha256",
         "sanitized_digest_sha256",
         "sanitized_queryplan",
+        "final_relop",
         "operator_count",
         "complete_physical_queryplan",
         "provenance",
@@ -411,6 +433,7 @@
           "pattern": "^$|^[0-9a-f]{64}$"
         },
         "sanitized_queryplan": { "type": "object" },
+        "final_relop": { "$ref": "#/$defs/finalRelop" },
         "operator_count": { "type": "integer", "minimum": 0 },
         "complete_physical_queryplan": { "type": "boolean" },
         "provenance": {
@@ -501,6 +524,400 @@
           }
         }
       ]
+    },
+    "finalRelop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "representation",
+        "content",
+        "digest_sha256",
+        "canonical_digest_sha256",
+        "logical_ids"
+      ],
+      "properties": {
+        "available": { "type": "boolean" },
+        "representation": { "enum": ["json", "text", "unavailable"] },
+        "content": {
+          "oneOf": [
+            { "type": "object" },
+            { "type": "array" },
+            { "type": "string" }
+          ]
+        },
+        "digest_sha256": { "type": "string", "pattern": "^$|^[0-9a-f]{64}$" },
+        "canonical_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "logical_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "available": { "const": false } },
+            "required": ["available"]
+          },
+          "then": {
+            "properties": {
+              "representation": { "const": "unavailable" },
+              "content": { "const": "" },
+              "digest_sha256": { "const": "" },
+              "canonical_digest_sha256": { "const": "" },
+              "logical_ids": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "available": { "const": true } },
+            "required": ["available"]
+          },
+          "then": {
+            "properties": {
+              "representation": { "enum": ["json", "text"] },
+              "digest_sha256": { "pattern": "^[0-9a-f]{64}$" },
+              "logical_ids": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "available": { "const": true },
+              "representation": { "const": "json" }
+            },
+            "required": ["available", "representation"]
+          },
+          "then": {
+            "properties": {
+              "canonical_digest_sha256": {
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "optimizerTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provenance",
+        "status",
+        "description",
+        "source_links",
+        "acquisition",
+        "captured_passes"
+      ],
+      "properties": {
+        "provenance": {
+          "enum": ["runtime_per_pass", "source_schedule_only", "unavailable"]
+        },
+        "status": {
+          "enum": ["CAPTURED", "OUTCOME_NOT_CAPTURED", "UNAVAILABLE"]
+        },
+        "description": { "type": "string", "minLength": 1 },
+        "source_links": { "$ref": "#/$defs/sourceLinks" },
+        "acquisition": { "$ref": "#/$defs/optimizerTraceAcquisition" },
+        "captured_passes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/capturedOptimizerPass" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "provenance": { "const": "runtime_per_pass" } },
+            "required": ["provenance"]
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "CAPTURED" },
+              "captured_passes": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "provenance": { "const": "source_schedule_only" } },
+            "required": ["provenance"]
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "OUTCOME_NOT_CAPTURED" },
+              "source_links": { "minItems": 1 },
+              "captured_passes": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "provenance": { "const": "unavailable" } },
+            "required": ["provenance"]
+          },
+          "then": {
+            "properties": {
+              "status": { "const": "UNAVAILABLE" },
+              "source_links": { "maxItems": 0 },
+              "captured_passes": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "optimizerTraceAcquisition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorization",
+        "workspace_kind",
+        "attempted",
+        "method",
+        "instrumentation_changed",
+        "build_attempted",
+        "build_succeeded",
+        "restart_attempted",
+        "restart_succeeded",
+        "command",
+        "non_executing",
+        "supplied_query_executed",
+        "request_scope_digest_sha256",
+        "cleanup_status",
+        "outcome",
+        "failure",
+        "raw_digest_sha256",
+        "driver_receipt"
+      ],
+      "properties": {
+        "authorization": { "enum": ["explicit_local", "read_only_only"] },
+        "workspace_kind": {
+          "enum": ["local_development", "remote_read_only"]
+        },
+        "attempted": { "type": "boolean" },
+        "method": {
+          "enum": [
+            "existing_non_executing_trace",
+            "request_scoped_local_instrumentation"
+          ]
+        },
+        "instrumentation_changed": { "type": "boolean" },
+        "build_attempted": { "type": "boolean" },
+        "build_succeeded": { "type": "boolean" },
+        "restart_attempted": { "type": "boolean" },
+        "restart_succeeded": { "type": "boolean" },
+        "command": {
+          "type": "string",
+          "pattern": "^\\.show queryplan <\\|\\n[\\s\\S]+$"
+        },
+        "non_executing": { "const": true },
+        "supplied_query_executed": { "const": false },
+        "request_scope_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "cleanup_status": { "enum": ["not_required", "completed"] },
+        "outcome": { "enum": ["captured", "trace_unavailable"] },
+        "failure": { "type": "string" },
+        "raw_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "driver_receipt": {
+          "oneOf": [
+            { "type": "object", "maxProperties": 0 },
+            { "$ref": "#/$defs/localTraceDriverReceipt" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "method": { "const": "request_scoped_local_instrumentation" }
+            },
+            "required": ["method"]
+          },
+          "then": {
+            "properties": {
+              "authorization": { "const": "explicit_local" },
+              "workspace_kind": { "const": "local_development" },
+              "instrumentation_changed": { "const": true },
+              "build_attempted": { "const": true },
+              "cleanup_status": { "const": "completed" },
+              "request_scope_digest_sha256": {
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "driver_receipt": { "$ref": "#/$defs/localTraceDriverReceipt" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": { "const": "existing_non_executing_trace" }
+            },
+            "required": ["method"]
+          },
+          "then": {
+            "properties": {
+              "instrumentation_changed": { "const": false },
+              "cleanup_status": { "const": "not_required" },
+              "driver_receipt": { "type": "object", "maxProperties": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "outcome": { "const": "captured" } },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "request_scope_digest_sha256": {
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "failure": { "const": "" },
+              "raw_digest_sha256": { "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "outcome": { "const": "trace_unavailable" } },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "failure": { "minLength": 1 },
+              "raw_digest_sha256": { "const": "" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authorization": { "const": "explicit_local" },
+              "outcome": { "const": "trace_unavailable" }
+            },
+            "required": ["authorization", "outcome"]
+          },
+          "then": {
+            "properties": {
+              "method": { "const": "request_scoped_local_instrumentation" }
+            }
+          }
+        }
+      ]
+    },
+    "localTraceDriverReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt_digest_sha256",
+        "source_head_digest_sha256",
+        "validated",
+        "base_ref_matches_source",
+        "detached_head_matches_source",
+        "worktree_isolated",
+        "ownership_marker_validated",
+        "loopback_endpoint_validated",
+        "port_was_free",
+        "preexisting_processes_preserved",
+        "build_job_object_assigned",
+        "service_job_object_assigned",
+        "build_timed_out",
+        "all_owned_processes_exited",
+        "service_stopped",
+        "port_released",
+        "worktree_registration_removed",
+        "worktree_path_removed",
+        "primary_checkout_preserved",
+        "cleanup_finally",
+        "outcome",
+        "trace_output_digest_sha256"
+      ],
+      "properties": {
+        "receipt_digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_head_digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "validated": { "const": true },
+        "base_ref_matches_source": { "const": true },
+        "detached_head_matches_source": { "type": "boolean" },
+        "worktree_isolated": { "const": true },
+        "ownership_marker_validated": { "const": true },
+        "loopback_endpoint_validated": { "const": true },
+        "port_was_free": { "const": true },
+        "preexisting_processes_preserved": { "const": true },
+        "build_job_object_assigned": { "type": "boolean" },
+        "service_job_object_assigned": { "type": "boolean" },
+        "build_timed_out": { "type": "boolean" },
+        "all_owned_processes_exited": { "const": true },
+        "service_stopped": { "const": true },
+        "port_released": { "const": true },
+        "worktree_registration_removed": { "const": true },
+        "worktree_path_removed": { "const": true },
+        "primary_checkout_preserved": { "const": true },
+        "cleanup_finally": { "const": true },
+        "outcome": { "enum": ["captured", "failed"] },
+        "trace_output_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "capturedOptimizerPass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "phase",
+        "concrete_pass",
+        "request_scope_digest_sha256",
+        "changed",
+        "before",
+        "after",
+        "before_digest_sha256",
+        "after_digest_sha256"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "phase": {
+          "enum": ["initial-optimize", "partial-queries", "final-optimize"]
+        },
+        "concrete_pass": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.+`]+$"
+        },
+        "request_scope_digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "changed": { "type": "boolean" },
+        "before": { "type": "string", "minLength": 1 },
+        "after": { "type": "string", "minLength": 1 },
+        "before_digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "after_digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
     "planRecovery": {
       "type": "object",
@@ -812,6 +1229,7 @@
       "required": [
         "id",
         "title",
+        "concrete_pass",
         "traversal",
         "predicate",
         "applicability",
@@ -819,19 +1237,109 @@
         "before",
         "after",
         "outcome",
+        "runtime_evidence",
         "source_links"
       ],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
         "title": { "type": "string" },
+        "concrete_pass": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.+`]+$"
+        },
         "traversal": { "type": "string" },
         "predicate": { "type": "string" },
         "applicability": { "type": "string" },
         "optimization": { "type": "string" },
         "before": { "type": "string" },
         "after": { "type": "string" },
-        "outcome": { "enum": ["OBSERVED", "TRANSFORMED", "SCHEDULED_NO_OP", "ESTIMATED"] },
+        "outcome": {
+          "enum": [
+            "OBSERVED",
+            "TRANSFORMED",
+            "SCHEDULED_NO_OP",
+            "EXECUTED_OUTCOME_NOT_CAPTURED",
+            "NOT_TRACED",
+            "ESTIMATED"
+          ]
+        },
+        "runtime_evidence": { "$ref": "#/$defs/runtimePassEvidence" },
         "source_links": { "$ref": "#/$defs/sourceLinks" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": ["TRANSFORMED", "SCHEDULED_NO_OP"]
+              }
+            },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "runtime_evidence": {
+                "properties": {
+                  "captured": { "const": true },
+                  "trace_pass_id": { "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+                  "sequence": { "minimum": 1 },
+                  "before_digest_sha256": { "pattern": "^[0-9a-f]{64}$" },
+                  "after_digest_sha256": { "pattern": "^[0-9a-f]{64}$" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": ["EXECUTED_OUTCOME_NOT_CAPTURED", "NOT_TRACED"]
+              }
+            },
+            "required": ["outcome"]
+          },
+          "then": {
+            "properties": {
+              "runtime_evidence": {
+                "properties": {
+                  "captured": { "const": false },
+                  "trace_pass_id": { "const": "" },
+                  "sequence": { "const": 0 },
+                  "before_digest_sha256": { "const": "" },
+                  "after_digest_sha256": { "const": "" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "runtimePassEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captured",
+        "trace_pass_id",
+        "sequence",
+        "before_digest_sha256",
+        "after_digest_sha256"
+      ],
+      "properties": {
+        "captured": { "type": "boolean" },
+        "trace_pass_id": {
+          "type": "string",
+          "pattern": "^$|^[a-z0-9][a-z0-9._-]*$"
+        },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "before_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        },
+        "after_digest_sha256": {
+          "type": "string",
+          "pattern": "^$|^[0-9a-f]{64}$"
+        }
       }
     },
     "passRunner": {
@@ -906,6 +1414,8 @@
         "details": { "type": "string" },
         "logical_operator_ids": {
           "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
           "items": { "$ref": "#/$defs/identifier" }
         },
         "input_schema": {
@@ -961,13 +1471,21 @@
     "logicalPhysicalMapping": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["logical_id", "physical_operator_ids", "reason", "source_links"],
+      "required": [
+        "logical_id",
+        "physical_operator_ids",
+        "builder_method",
+        "reason",
+        "source_links"
+      ],
       "properties": {
         "logical_id": { "$ref": "#/$defs/identifier" },
         "physical_operator_ids": {
           "type": "array",
+          "uniqueItems": true,
           "items": { "$ref": "#/$defs/identifier" }
         },
+        "builder_method": { "type": "string", "pattern": "\\.[Vv][Ii][Ss][Ii][Tt]" },
         "reason": { "type": "string" },
         "source_links": { "$ref": "#/$defs/sourceLinks" }
       }
@@ -1001,6 +1519,7 @@
         "full_plan": { "$ref": "#/$defs/fullPlan" },
         "logical_to_physical": {
           "type": "array",
+          "uniqueItems": true,
           "items": { "$ref": "#/$defs/logicalPhysicalMapping" }
         },
         "raw_plan_sections": {

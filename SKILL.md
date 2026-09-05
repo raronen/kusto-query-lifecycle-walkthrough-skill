@@ -30,10 +30,16 @@ Allowed:
 - read-only inspection of an authorized local Azure-Kusto-Service workspace;
 - read-only git commands used to resolve the workspace HEAD;
 - local deterministic scripts in this package.
+- after explicit authorization for an isolated local-development workspace only: request-scoped
+  optimizer instrumentation, the repository-prescribed local build/test, and restart of only
+  the local service instance needed to collect non-executing per-pass snapshots.
 
 Forbidden:
 
 - executing the supplied query, even to sample one row;
+- modifying, building, restarting, or instrumenting production, shared, remote, or
+  non-development services;
+- broad/global optimizer logging or instrumentation not correlated to the one plan request;
 - copying Azure-Kusto-Service source, internal logs, proprietary plans, credentials, or a
   previous query-specific HTML into this package;
 - inventing transformations, runtime operators, stack placement, allocator addresses, or
@@ -66,12 +72,15 @@ remediations are advisory. The
      --output "<model.json>"
    ```
 
-4. Attempt to collect real non-executing plan evidence. Inspect the returned payload and
-   explicitly prove that it contains a complete physical `QueryPlan` operator tree. Logical
-   Relop, hints, statistics, or a missing/truncated `QueryPlan` cell are not complete evidence.
-   Record the tool, timestamp, provenance, and sanitized plan digest. Keep proprietary raw
-   output out of this repository; include a redacted raw-plan section in the local model/page
-   only when authorized and evidence-safe.
+4. Attempt to collect real non-executing plan evidence. Preserve the actual final logical
+   `RelopTree` returned by the operation (object/array or exact nonempty serialized text), its
+   exact-content digest, canonical structural digest when JSON-decodable, and deterministic
+   logical IDs. Separately prove that the response contains a
+   complete physical `QueryPlan` operator tree. A final Relop, hints, statistics, or a
+   missing/truncated `QueryPlan` cell does not satisfy the physical gate. Record the tool,
+   timestamp, provenance, and both digests. Keep proprietary raw output out of this repository;
+   the query-specific local model/page is the only place where the actual final Relop content
+   may be retained.
 5. If automatic evidence lacks a complete physical `QueryPlan`, do not render yet:
 
    - Build the exact plan-only command with `scripts\plan_recovery.py`. Its form is
@@ -111,13 +120,98 @@ remediations are advisory. The
    the authoritative specification. Emit exactly 45 canonical substeps. Exactly S4.1, S4.4,
    S6.1, and S6.2 omit the runner, runner badge, lab, and placeholder. Every other substep has
    its canonical runner family and interaction count.
-8. Follow [references/applicability-rules.md](references/applicability-rules.md). Keep no-op
-   phases with a precise query-specific explanation. Include optimizer labs only for
-   applicable passes. Distinguish `TRANSFORMED` from `SCHEDULED_NO_OP`.
-9. Only after the recovery rule above permits estimation, set top-level `evidence_mode` to
+8. Follow [references/applicability-rules.md](references/applicability-rules.md). Inspect the
+   current source that lowers the recorded final logical nodes into physical nodes (for example,
+   the applicable `InitialQueryPlanBuilder.Visit*` methods). Every logical-to-physical mapping
+   must name the exact builder method, link its current-HEAD source lines, reference a logical
+   ID present in `plan.final_relop.logical_ids`, and reference physical IDs present in the
+   evidenced physical tree.
+9. Actively acquire optimizer trace evidence; do not stop at graceful degradation:
+
+   - Inspect current source around `PassManager.Execute`, concrete `pass.Execute` calls, tree
+     serialization, request context, and existing diagnostics. Discover the repository's own
+     build/test/run commands; do not invent them.
+   - First attempt an existing request-scoped trace path using only the exact non-executing
+     `.show queryplan <|` command. Never send the query to an execution endpoint.
+   - If existing diagnostics do not expose per-pass snapshots, and the user explicitly
+     authorized an isolated local-development workspace, proceed autonomously: add the smallest
+     request-scoped instrumentation around each applicable `pass.Execute`, capture the exact
+     logical tree immediately before and after, correlate records to only that plan request,
+     build/test with repository-supported commands, restart only that local service, issue the
+     same plan-only request, capture the trace, and remove the instrumentation. Do not ask again
+     between these local steps once authorization is explicit.
+   - Run this lifecycle through `scripts\local_trace_driver.py`. Give it a new disposable
+     worktree path outside the primary checkout, a free explicit loopback port, the
+     instrumentation patch, repository-supported build/service argv arrays, and output/receipt
+     paths outside both checkouts. The driver refuses occupied ports and non-loopback endpoints,
+     resolves `--base-ref` to the current source HEAD, verifies the detached worktree HEAD,
+     contains timed build/service trees in Windows Job Objects, never stops an existing process,
+     sends the exact plan command itself, and removes every owned process plus the worktree path
+     and registration in `finally`. It rejects a primary checkout with any tracked, staged, or
+     untracked change and refuses build/service argv that reference the primary checkout.
+
+     ```powershell
+     python scripts\local_trace_driver.py `
+       --primary-checkout "<Azure-Kusto-Service-workspace>" `
+       --worktree "<new-sibling-worktree>" --base-ref "<workspace-HEAD>" `
+       --instrumentation-patch "<request-scoped.patch>" `
+       --build-command-json '["<repo-build-tool>","<validated-args>"]' `
+       --service-command-json '["<built-local-engine>","<validated-args>"]' `
+       --cluster-uri "http://127.0.0.1:<free-port>" `
+       --trace-url "http://127.0.0.1:<free-port>/<source-verified-plan-endpoint>" `
+       --database "<database>" --query-file "<query.kql>" `
+       --request-scope "<deterministic-unique-scope>" `
+       --trace-output "<outside-repos>\trace.json" `
+       --receipt-file "<outside-repos>\receipt.json"
+     ```
+
+   - Never instrument a production/shared/remote service. If local modification authorization
+     is absent, attempt only existing read-only tracing and record that boundary.
+   - Validate captured output with `scripts\optimizer_trace.py`; bind each pass model entry to
+     its unique `trace_pass_id`. Record authorization, attempt, method, build/restart results,
+     request-scope digest, raw trace digest, cleanup, and failure in
+     `optimizer_trace.acquisition`.
+     For an instrumented local capture, use:
+
+     ```powershell
+     python scripts\optimizer_trace.py `
+       --payload-file "<request-scoped-trace.json>" `
+       --query-file "<query.kql>" `
+       --authorization explicit_local `
+       --workspace-kind local_development `
+       --source-head "<workspace-HEAD>" `
+       --cluster-uri "http://127.0.0.1:<free-port>" `
+       --method request_scoped_local_instrumentation `
+       --instrumentation-changed --build-attempted --build-succeeded `
+       --restart-attempted --restart-succeeded --cleanup-status completed `
+       --driver-receipt-file "<outside-repos>\receipt.json" `
+       --final-relop-canonical-digest-sha256 `
+         "<plan.final_relop.canonical_digest_sha256>"
+     ```
+
+   - Do not render a COMPLETE model with `attempted: false`. Runtime capture requires a
+     request-scoped non-executing record and all captured pass records must be consumed exactly
+     once. Instrumented capture also requires a valid driver receipt proving the worktree was
+     outside the primary checkout, the chosen loopback port had no preexisting listener, the
+     listener belonged to the driver-started PID tree, the primary checkout was unchanged, and
+     every build/service process, port, worktree path, and worktree registration were cleaned up
+     in `finally`. Keep the raw receipt outside the model/page; `optimizer_trace.py` validates it
+     and emits only its digest plus nonsensitive proof booleans/enums.
+
+   Never reconstruct pass history from the final RelopTree and final QueryPlan. `TRANSFORMED`
+   and `SCHEDULED_NO_OP` require runtime per-pass before/after snapshots with matching digests.
+   Trace events must have strictly increasing sequence, optimizer phase, canonical and concrete
+   pass identities, the same request-scope digest, canonical parseable Relop JSON, verified `changed`,
+   pass-to-pass continuity, and a terminal digest equal to
+   `plan.final_relop.canonical_digest_sha256`.
+   Only after active capture fails may source scheduling/control-flow evidence establish
+   `EXECUTED_OUTCOME_NOT_CAPTURED`; render identical explicit `OUTCOME NOT CAPTURED` panes.
+   With neither runtime snapshots nor source schedule evidence, use `NOT_TRACED`. Never label
+   an uncaptured pass as transformed or no-op.
+10. Only after the recovery rule above permits estimation, set top-level `evidence_mode` to
    `ESTIMATED`, state the recovery provenance, and keep every unsupported claim visibly
    estimated. Never blend estimated claims into observed evidence.
-10. Validate and render against the same workspace:
+11. Validate and render against the same workspace:
 
    ```powershell
    python scripts\render_walkthrough.py `
@@ -125,9 +219,9 @@ remediations are advisory. The
      --source-workspace "<Azure-Kusto-Service-workspace>"
    ```
 
-11. Inspect the generated page against
+12. Inspect the generated page against
    [references/artifact-quality.md](references/artifact-quality.md).
-12. After a valid page is rendered and saved, attempt best-effort publication only through:
+13. After a valid page is rendered and saved, attempt best-effort publication only through:
 
     ```powershell
     .\scripts\Publish-Walkthrough.ps1 `
@@ -148,6 +242,11 @@ Do not claim success unless all are true:
 - the renderer accepted the complete model;
 - the page exists under `Documents\Bookmarks\<query-derived-slug>\<slug>.html`;
 - the page visibly says `EVIDENCE` or `ESTIMATED`;
+- the page visibly renders the actual final RelopTree, its digest, and optimizer trace status;
+- the page visibly reports the optimizer trace acquisition attempt, authorization, safety,
+  request-scope digest, instrumentation/build/restart/cleanup status, and any failure;
+- physical lowering mappings link each recorded final logical ID to evidenced physical IDs via
+  exact source-backed `Visit*` methods;
 - the final output identifies automatic, user-supplied, or estimated-after-recovery plan
   provenance;
 - every operator/action link is absolute, line-specific, and pinned to current workspace HEAD;

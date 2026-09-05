@@ -117,8 +117,25 @@ exact source, unique experiments, and semantic or CSL-to-Relop mapping where app
 
 Preparation and all optimization phases use pass runners. Only passes applicable to this query
 may appear. Each pass includes traversal, predicate, applicability, optimization target,
-cumulative colored diff, source, rule, and result. A scheduled pass with an unchanged tree is
-explicitly `SCHEDULED_NO_OP`, never a claimed transformation.
+cumulative colored diff, source, rule, and result. Optimizer history is never reconstructed
+from final states. Runtime per-pass snapshots permit `TRANSFORMED` or `SCHEDULED_NO_OP`; source
+schedule evidence without snapshots permits only `EXECUTED_OUTCOME_NOT_CAPTURED`; no trace
+permits `NOT_TRACED`.
+The workflow actively attempts request-scoped runtime capture first. With explicit authorization
+for an isolated local-development workspace, it may add temporary instrumentation around
+`pass.Execute`, build/restart only the local service, issue the non-executing plan request,
+capture snapshots, and clean up. The packaged driver requires a free loopback endpoint and a
+disposable worktree outside the primary checkout, preserves preexisting processes, and emits a
+validated cleanup receipt. Every COMPLETE page exposes the acquisition result.
+The primary checkout must begin/end clean at the same HEAD/index tree. Launchers are suspended
+until assigned to Job Objects, and recursive deletion requires an unchanged invocation-owned
+marker; the page receives only receipt/scope digests and nonsensitive proof fields.
+
+Captured events use strict sequence and canonical model/source pass identities, carry the same
+request-scope digest and phase, contain canonical Relop JSON, verify `changed`, preserve pass-to-pass
+continuity, and terminate at the recorded final Relop digest.
+The final Relop retains an exact-content provenance digest and a separate canonical structural
+digest; optimizer continuity terminates at the canonical digest.
 
 ### Physical plan
 
@@ -126,7 +143,10 @@ S8.1 through S8.4 have physical runners and input-contract collapses. S8.5 switc
 runner and is the only location of the physical-plan deep dive. The deep dive carries
 the complete evidenced plan, linked operators, logical-to-physical mapping, schemas, node IDs,
 key indexes, execution/Rust eligibility, target scope, remote metadata, and only those raw
-sections allowed by the evidence policy.
+sections allowed by the evidence policy. The page separately renders the exact final RelopTree.
+Each mapping names and links its source lowering `Visit*` method and connects a logical ID from
+that RelopTree to physical IDs from the evidenced QueryPlan. Mappings cover every final logical
+ID and every pair agrees with the target physical operator's `logical_operator_ids`.
 
 ### Serialize/native boundary
 

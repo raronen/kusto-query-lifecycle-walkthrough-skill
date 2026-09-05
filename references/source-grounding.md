@@ -40,6 +40,32 @@ Azure DevOps treats `lineEnd` as exclusive. The model's `end_line` is inclusive,
 `lineEnd=end_line+1` while keeping the displayed model range inclusive.
 
 Use the current workspace path and exact line range. Verify each target after constructing it.
+
+## Physical lowering
+
+Trace each recorded final logical Relop node through the current physical-plan builder. Record
+the concrete `Visit*` method that constructs or selects the corresponding physical operator
+(commonly an `InitialQueryPlanBuilder.Visit*` implementation), not merely the builder class or
+stage entry point. Link the exact method lines at the pinned workspace HEAD.
+
+The mapping must join identifiers from the preserved final RelopTree to operator IDs from the
+sanitized physical QueryPlan. Do not infer optimizer pass history from this mapping: lowering
+explains how the final logical state becomes the final physical state, not which optimizer pass
+produced the logical state.
+
+Cover every `plan.final_relop.logical_ids` value. For every mapped physical operator, verify the
+same logical ID appears in that operator's `logical_operator_ids`. Express one logical mapping
+once; list multiple physical IDs in that mapping when source proves fan-out. Reject duplicate or
+contradictory pairs.
+
+## Optimizer trace instrumentation
+
+Before adding local instrumentation, locate the current `PassManager.Execute` orchestration,
+the concrete `pass.Execute` invocation, an existing logical-tree serializer, and the
+request-context/correlation mechanism. Link those exact current-HEAD lines in
+`optimizer_trace.source_links`. Instrument immediately around the call, gate emission by the
+single plan request's scope token, and avoid broad logging. Source links establish where capture
+occurred; the captured payload and digests establish the outcome.
 Do not link to search results, directory pages, PR diffs, branch tips, or whole files.
 
 ## Claim discipline

@@ -2769,7 +2769,60 @@ must be reproduced exactly unless the caveat is explicitly waived.
 - [ ] `--text` is referenced by four CSS rules and declared by none; `--surface` is declared and
       unused. **[C]**
 
+## Additive evidence-integrity extension
+
+The reusable walkthrough must preserve and visibly render the actual final logical RelopTree
+returned by non-executing `.show queryplan`, with an independent digest and deterministic logical
+IDs. This logical artifact is required in EVIDENCE mode and is separate from the complete
+physical QueryPlan gate.
+
+Logical-to-physical mappings must connect those recorded logical IDs to physical IDs from the
+evidenced physical tree. Each mapping names the applicable lowering `Visit*` method (for example,
+an `InitialQueryPlanBuilder.Visit*` method) and links exact current-HEAD source lines.
+
+Final RelopTree and QueryPlan states do not reveal optimizer pass history. `TRANSFORMED` and
+`SCHEDULED_NO_OP` require runtime per-pass before/after snapshots and matching digests.
+Source-only scheduling evidence permits `EXECUTED_OUTCOME_NOT_CAPTURED` with explicit
+`OUTCOME NOT CAPTURED` panes; absent scheduling evidence is `NOT_TRACED`.
+
+Missing snapshots require an active acquisition attempt. Existing request-scoped diagnostics
+are tried first. With explicit authorization for an isolated local-development workspace, the
+workflow may add temporary request-scoped instrumentation around `pass.Execute`, use
+repository-supported build/test commands, restart only that local service, issue only the exact
+non-executing plan request, capture per-pass snapshots, and remove the instrumentation. Every
+COMPLETE model records the attempt, authorization, request-scope digest, safety attestations,
+build/restart result, capture digest, cleanup, and failure. Captured pass IDs bind one-to-one to
+rendered pass entries.
+
+Instrumented acquisition is loopback-only and runs from a new disposable worktree outside the
+primary checkout. The selected explicit port must have no listener before startup. The packaged
+driver resolves the base ref to the primary/source HEAD, verifies the worktree is detached at
+that commit, rejects any dirty/staged/untracked primary state, and executes commands only in the
+isolated checkout. Build/service launchers start suspended, enter finite-time Windows Job
+Objects, then resume; `.cmd`/`.bat` wrappers use explicit `%ComSpec%` handling. The driver never
+stops/replaces an existing Engine, and in `finally` verifies every owned process exited and
+applies exact-PID cleanup as defense in depth. It removes Git registration after partial
+creation, but recursively removes a path only when an invocation-owned marker still matches;
+otherwise it leaves the unexpected path and fails cleanup. The receipt proves the port,
+registration/path, primary HEAD/index/clean worktree state, and process cleanup.
+
+The raw receipt remains outside the model/page because it contains local paths, PIDs, and the
+request-scope value. The model retains only its validated digest and nonsensitive safety,
+containment, cleanup, and outcome fields.
+
+Trace events use sequence `1..N`, optimizer phase, canonical model pass ID, concrete source pass
+identity, and the same request scope. Before/after snapshots are canonical parseable Relop JSON;
+`changed` is recomputed from their digests; adjacent events are continuous; model phase/order
+must match; and the terminal after digest equals the recorded final Relop digest.
+
+The final Relop carries both an exact-content provenance digest and, when JSON-decodable, a
+canonical compact/sorted structural digest. The terminal optimizer snapshot binds to the
+canonical digest so whitespace and property order cannot break or spoof structural continuity.
+
+Logical-to-physical mappings cover every final logical ID. Every `(logical ID, physical ID)` pair
+must agree with the target physical operator's `logical_operator_ids`; duplicate or contradictory
+mappings are invalid.
+
 ---
 
 *End of specification.*
-

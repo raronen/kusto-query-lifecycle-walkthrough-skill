@@ -338,6 +338,22 @@
       ]
     }
   },
+  "evidence_integrity_extensions": [
+    "Visible exact final RelopTree content and SHA-256 digest",
+    "Explicit optimizer trace provenance and availability",
+    "Mandatory active request-scoped optimizer trace acquisition attempt",
+    "Explicit-local gate for temporary pass.Execute instrumentation, build, and restart",
+    "Packaged disposable-worktree and owned-process acquisition/cleanup driver",
+    "Base-ref/source-HEAD binding and Windows Job Object process containment",
+    "Suspended launch before Job assignment with exact-PID cleanup fallback",
+    "Clean-primary gate and invocation-owned worktree deletion marker",
+    "Loopback-only free-port trace endpoint with preexisting process preservation",
+    "Visible acquisition safety, request scope, cleanup, and failure record",
+    "Ordered phase/pass/request binding with canonical Relop continuity and terminal digest",
+    "Runtime snapshot digests required for TRANSFORMED and SCHEDULED_NO_OP",
+    "EXECUTED_OUTCOME_NOT_CAPTURED for source-scheduled passes without runtime snapshots",
+    "Complete source-linked Visit* lowering with logical/physical pair consistency"
+  ],
   "interaction_invariants": [
     "Exactly 41 canonical substeps have one runner; S4.1, S4.4, S6.1, and S6.2 have none.",
     "Every runner exposes at least two distinct snapshots.",

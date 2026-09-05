@@ -168,6 +168,20 @@ def run_smoke(html_path: Path, edge_path: Path) -> dict[str, Any]:
                         "Syntax|Semantic|Relop|Preparation|Initial optimize|Partial queries|" +
                         "Final optimize|Physical plan|Serialize|Execute",
                         "stage ordering or labels are not canonical");
+                      check(document.getElementById("final-relop-content").textContent.includes(
+                        '"LogicalId": "logical-op-filter"'),
+                        "actual final RelopTree content is not visibly rendered");
+                      check(document.getElementById("final-relop-digest").textContent.includes(
+                        data.plan.final_relop.digest_sha256),
+                        "final RelopTree digest is not visibly rendered");
+                      check(document.getElementById("optimizer-trace-status").textContent ===
+                        data.optimizer_trace.status,
+                        "optimizer trace status is not visibly rendered");
+                      check(document.getElementById("optimizer-acquisition").textContent.includes(
+                        data.optimizer_trace.acquisition.method) &&
+                        document.getElementById("optimizer-acquisition").textContent.includes(
+                          "Plan-only request; supplied query not executed"),
+                        "optimizer trace acquisition and safety are not visibly rendered");
 
                       data.stages.forEach((stage, stageIndex) => {
                         app.selectStage(stageIndex);

@@ -13,10 +13,26 @@ Put each applicable action in the relevant query-specific substep runner. Each a
 - exact source evidence;
 - evidence kind.
 
-Use `TRANSFORMED` only when the before and after representations differ and evidence ties the
-change to that pass. Use `SCHEDULED_NO_OP` when scheduling is evidenced but before and after
-are identical. Do not create a generic catalog of passes or a pass runner for irrelevant
-optimizations.
+Use `TRANSFORMED` only when runtime per-pass before/after snapshots differ, their digests match,
+and evidence ties those snapshots to that pass. Use `SCHEDULED_NO_OP` only when the same runtime
+trace captures identical before/after snapshots. Never infer either result by comparing the
+final RelopTree with the final physical QueryPlan.
+
+When pinned source control flow proves execution but runtime per-pass snapshots are absent, use
+`EXECUTED_OUTCOME_NOT_CAPTURED`; both panes must explicitly say `OUTCOME NOT CAPTURED`. When
+neither runtime snapshots nor execution evidence exists, use `NOT_TRACED`. Do not create a
+generic catalog of passes or a pass runner for irrelevant optimizations.
+
+Do not choose either fallback until active optimizer trace acquisition has been attempted.
+When an isolated local-development workspace is explicitly authorized, missing trace support
+requires request-scoped instrumentation around `pass.Execute`, a supported local build/restart,
+one non-executing plan request, capture, and cleanup. Bind every captured pass through
+`runtime_evidence.trace_pass_id`.
+
+Instrumentation additionally requires a loopback `query.cluster_uri`, a free explicit port, a
+disposable sibling worktree, and the packaged driver's cleanup receipt. The trace must bind
+sequence, optimizer phase, canonical and concrete pass identity, request scope, canonical Relop
+snapshots, verified change, continuity, and the terminal final-Relop digest.
 
 Every optimizer phase still has at least one query-specific substep. If the phase schedules no
 applicable transformation, its pass runner must show the evaluated evidence gates, the
@@ -37,6 +53,13 @@ with the sanitized plan operator count. Every node must have an exact source lin
 
 In `ESTIMATED` mode, call the section "Estimated physical plan" and identify every inferred
 node. Never present a simplified cartoon as the complete plan.
+
+Every logical-to-physical mapping must name the exact lowering `Visit*` method, link its pinned
+source lines, use a logical ID derived from `plan.final_relop.content`, and cover physical IDs in
+the evidenced tree. The rendered page must show the actual final RelopTree above these mappings.
+Mappings must cover every final logical ID. Every mapped pair must also appear in the target
+physical operator's `logical_operator_ids`; duplicate logical mappings, duplicate pairs, and
+contradictory pairs are invalid.
 
 ## Serialization and execution
 

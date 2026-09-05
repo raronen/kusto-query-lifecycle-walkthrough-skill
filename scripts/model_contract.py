@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from canonical_spec import BOUNDARY_LANES_BY_KEY, CANONICAL_SUBSTEPS
 from plan_recovery import (
     SERIALIZED_CHILD_KEYS,
+    _logical_ids,
     build_recovery_prompt,
     is_utc_timestamp,
 )
@@ -39,10 +40,18 @@ EVIDENCE_KINDS = {
     "OBSERVED",
     "TRANSFORMED",
     "SCHEDULED_NO_OP",
+    "EXECUTED_OUTCOME_NOT_CAPTURED",
+    "NOT_TRACED",
     "NO_OP",
     "ESTIMATED",
 }
 NO_OP_KINDS = {"NO_OP", "SCHEDULED_NO_OP"}
+UNCAPTURED_KINDS = {"EXECUTED_OUTCOME_NOT_CAPTURED", "NOT_TRACED"}
+OPTIMIZER_TRACE_PROVENANCE = {
+    "runtime_per_pass",
+    "source_schedule_only",
+    "unavailable",
+}
 LANGUAGES = {"Managed", "C++", "Rust"}
 HEAP_STATES = {"live", "mutated", "released"}
 COMPONENT_STATES = {"active", "waiting", "not-created"}
@@ -445,6 +454,7 @@ def _validate_artifact(
     location: str,
     *,
     no_op: bool,
+    outcome_not_captured: bool = False,
 ) -> None:
     artifact = _shape(
         value,
@@ -477,9 +487,14 @@ def _validate_artifact(
             f"{operator_location}.source_links",
         )
     _unique(operators, lambda item: item["id"], f"{location}.operators", "operator id")
-    if no_op and before != after:
+    if outcome_not_captured:
+        if before != after or "OUTCOME NOT CAPTURED" not in before.upper():
+            raise ModelError(
+                f"{location} must explicitly show identical OUTCOME NOT CAPTURED artifacts."
+            )
+    elif no_op and before != after:
         raise ModelError(f"{location} is a no-op artifact but before and after differ.")
-    if not no_op and before == after:
+    if not no_op and not outcome_not_captured and before == after:
         raise ModelError(f"{location} must show distinct before and after representations.")
 
 
@@ -664,11 +679,16 @@ def _validate_compiler(
 
 def _validate_pass(
     value: Any,
+    stage_id: str,
     badge: str,
     mode: str,
     head: str,
     project: str,
     location: str,
+    optimizer_trace: dict[str, Any],
+    enforce_optimizer_trace: bool,
+    used_trace_pass_ids: set[str],
+    used_trace_sequences: list[int],
 ) -> None:
     pass_data = _shape(
         value,
@@ -694,6 +714,7 @@ def _validate_pass(
             (
                 "id",
                 "title",
+                "concrete_pass",
                 "traversal",
                 "predicate",
                 "applicability",
@@ -701,11 +722,17 @@ def _validate_pass(
                 "before",
                 "after",
                 "outcome",
+                "runtime_evidence",
                 "source_links",
             ),
             pass_location,
         )
         _identifier(item["id"], f"{pass_location}.id")
+        concrete_pass = _text(
+            item["concrete_pass"], f"{pass_location}.concrete_pass"
+        )
+        if not re.fullmatch(r"[A-Za-z0-9_.+`]+", concrete_pass):
+            raise ModelError(f"{pass_location}.concrete_pass is invalid.")
         for key in (
             "title",
             "traversal",
@@ -720,6 +747,8 @@ def _validate_pass(
             "OBSERVED",
             "TRANSFORMED",
             "SCHEDULED_NO_OP",
+            "EXECUTED_OUTCOME_NOT_CAPTURED",
+            "NOT_TRACED",
             "ESTIMATED",
         }:
             raise ModelError(f"{pass_location}.outcome is invalid for an applicable pass.")
@@ -735,6 +764,116 @@ def _validate_pass(
             raise ModelError(
                 f"{pass_location} claims SCHEDULED_NO_OP but before and after differ."
             )
+        runtime = _shape(
+            item["runtime_evidence"],
+            (
+                "captured",
+                "trace_pass_id",
+                "sequence",
+                "before_digest_sha256",
+                "after_digest_sha256",
+            ),
+            f"{pass_location}.runtime_evidence",
+        )
+        captured = _boolean(
+            runtime["captured"], f"{pass_location}.runtime_evidence.captured"
+        )
+        trace_pass_id = _text(
+            runtime["trace_pass_id"],
+            f"{pass_location}.runtime_evidence.trace_pass_id",
+            allow_empty=not captured,
+        )
+        sequence = _integer(
+            runtime["sequence"],
+            f"{pass_location}.runtime_evidence.sequence",
+            minimum=0,
+        )
+        before_digest = _text(
+            runtime["before_digest_sha256"],
+            f"{pass_location}.runtime_evidence.before_digest_sha256",
+            allow_empty=not captured,
+        )
+        after_digest = _text(
+            runtime["after_digest_sha256"],
+            f"{pass_location}.runtime_evidence.after_digest_sha256",
+            allow_empty=not captured,
+        )
+        if captured and enforce_optimizer_trace:
+            if optimizer_trace["provenance"] != "runtime_per_pass":
+                raise ModelError(
+                    f"{pass_location} claims runtime snapshots without runtime_per_pass provenance."
+                )
+            if not re.fullmatch(r"[0-9a-f]{64}", before_digest) or not re.fullmatch(
+                r"[0-9a-f]{64}", after_digest
+            ):
+                raise ModelError(f"{pass_location} runtime snapshot digests are invalid.")
+            if hashlib.sha256(item["before"].encode("utf-8")).hexdigest() != before_digest:
+                raise ModelError(f"{pass_location} before snapshot digest does not match.")
+            if hashlib.sha256(item["after"].encode("utf-8")).hexdigest() != after_digest:
+                raise ModelError(f"{pass_location} after snapshot digest does not match.")
+            captured_record = optimizer_trace["_captured_by_id"].get(trace_pass_id)
+            if captured_record is None:
+                raise ModelError(
+                    f"{pass_location}.runtime_evidence.trace_pass_id is absent from the captured optimizer trace."
+                )
+            if trace_pass_id != item["id"]:
+                raise ModelError(
+                    f"{pass_location}.runtime_evidence.trace_pass_id must equal the canonical model pass id."
+                )
+            if (
+                captured_record["sequence"] != sequence
+                or captured_record["phase"] != stage_id
+                or captured_record["concrete_pass"] != concrete_pass
+                or captured_record["before"] != item["before"]
+                or captured_record["after"] != item["after"]
+                or captured_record["before_digest_sha256"] != before_digest
+                or captured_record["after_digest_sha256"] != after_digest
+            ):
+                raise ModelError(
+                    f"{pass_location} does not match its captured optimizer trace record."
+                )
+            if trace_pass_id in used_trace_pass_ids:
+                raise ModelError(
+                    f"{pass_location}.runtime_evidence.trace_pass_id is already mapped."
+                )
+            used_trace_pass_ids.add(trace_pass_id)
+            used_trace_sequences.append(sequence)
+            expected_outcome = (
+                "TRANSFORMED" if before_digest != after_digest else "SCHEDULED_NO_OP"
+            )
+            if item["outcome"] != expected_outcome:
+                raise ModelError(
+                    f"{pass_location} outcome contradicts its runtime before/after snapshots."
+                )
+        elif enforce_optimizer_trace:
+            if trace_pass_id or sequence or before_digest or after_digest:
+                raise ModelError(
+                    f"{pass_location} uncaptured runtime evidence must not claim a trace id or digests."
+                )
+            if item["outcome"] in {"TRANSFORMED", "SCHEDULED_NO_OP"}:
+                raise ModelError(
+                    f"{pass_location} cannot claim {item['outcome']} without runtime per-pass evidence."
+                )
+            if item["outcome"] in UNCAPTURED_KINDS:
+                if item["before"] != item["after"] or "OUTCOME NOT CAPTURED" not in item[
+                    "before"
+                ].upper():
+                    raise ModelError(
+                        f"{pass_location} must explicitly use identical OUTCOME NOT CAPTURED snapshots."
+                    )
+        if enforce_optimizer_trace and item["outcome"] == "EXECUTED_OUTCOME_NOT_CAPTURED":
+            if optimizer_trace["provenance"] != "source_schedule_only":
+                raise ModelError(
+                    f"{pass_location} may claim executed only from source_schedule_only control flow."
+                )
+        if (
+            enforce_optimizer_trace
+            and item["outcome"] == "NOT_TRACED"
+            and optimizer_trace["provenance"] != "unavailable"
+        ):
+            raise ModelError(
+                f"{pass_location} NOT_TRACED requires unavailable optimizer trace provenance."
+            )
         _links(item["source_links"], head, project, f"{pass_location}.source_links")
     _unique(passes, lambda item: item["id"], f"{location}.applicable_passes", "pass id")
     outcomes = {item["outcome"] for item in passes}
@@ -746,12 +885,24 @@ def _validate_pass(
         raise ModelError(f"{location} estimated outcome is inconsistent.")
     if badge == "OBSERVED" and outcomes != {"OBSERVED"}:
         raise ModelError(f"{location} observed outcome is inconsistent.")
+    if badge == "EXECUTED_OUTCOME_NOT_CAPTURED" and outcomes != {
+        "EXECUTED_OUTCOME_NOT_CAPTURED"
+    }:
+        raise ModelError(f"{location} untraced executed outcome is inconsistent.")
+    if badge == "NOT_TRACED" and outcomes != {"NOT_TRACED"}:
+        raise ModelError(f"{location} unavailable trace outcome is inconsistent.")
     before = _text(pass_data["cumulative_before"], f"{location}.cumulative_before")
     after = _text(pass_data["cumulative_after"], f"{location}.cumulative_after")
     if badge == "TRANSFORMED" and before == after:
         raise ModelError(f"{location} transformed cumulative artifacts are identical.")
     if badge in NO_OP_KINDS and before != after:
         raise ModelError(f"{location} no-op cumulative artifacts differ.")
+    if badge in UNCAPTURED_KINDS and (
+        before != after or "OUTCOME NOT CAPTURED" not in before.upper()
+    ):
+        raise ModelError(
+            f"{location} must explicitly show cumulative OUTCOME NOT CAPTURED."
+        )
     tables = _list(
         pass_data["additional_context_tables"],
         f"{location}.additional_context_tables",
@@ -800,6 +951,8 @@ def _validate_operator(
     location: str,
     ids: set[str],
     node_ids: set[str],
+    final_logical_ids: set[str],
+    operator_logical_ids: dict[str, set[str]],
 ) -> int:
     operator = _shape(
         value,
@@ -838,6 +991,13 @@ def _validate_operator(
     )
     for index, logical_id in enumerate(logical_ids):
         _identifier(logical_id, f"{location}.logical_operator_ids[{index}]")
+    if len(set(logical_ids)) != len(logical_ids):
+        raise ModelError(f"{location}.logical_operator_ids must be unique.")
+    if final_logical_ids and not set(logical_ids) <= final_logical_ids:
+        raise ModelError(
+            f"{location}.logical_operator_ids references an ID absent from the final RelopTree."
+        )
+    operator_logical_ids[operator_id] = set(logical_ids)
     _validate_schema_fields(operator["input_schema"], f"{location}.input_schema")
     _validate_schema_fields(operator["output_schema"], f"{location}.output_schema")
     indexes = _list(operator["key_indexes"], f"{location}.key_indexes")
@@ -858,6 +1018,8 @@ def _validate_operator(
             f"{location}.children[{index}]",
             ids,
             node_ids,
+            final_logical_ids,
+            operator_logical_ids,
         )
         for index, child in enumerate(children)
     )
@@ -954,6 +1116,519 @@ def _validate_sanitized_queryplan(
     return topology
 
 
+def _validate_final_relop(value: Any, mode: str) -> set[str]:
+    relop = _shape(
+        value,
+        (
+            "available",
+            "representation",
+            "content",
+            "digest_sha256",
+            "canonical_digest_sha256",
+            "logical_ids",
+        ),
+        "model.plan.final_relop",
+    )
+    available = _boolean(relop["available"], "model.plan.final_relop.available")
+    representation = relop["representation"]
+    digest = _text(
+        relop["digest_sha256"],
+        "model.plan.final_relop.digest_sha256",
+        allow_empty=not available,
+    )
+    canonical_digest = _text(
+        relop["canonical_digest_sha256"],
+        "model.plan.final_relop.canonical_digest_sha256",
+        allow_empty=True,
+    )
+    logical_ids = _list(relop["logical_ids"], "model.plan.final_relop.logical_ids")
+    if mode == "EVIDENCE" and not available:
+        raise ModelError("EVIDENCE mode requires the actual final RelopTree.")
+    if not available:
+        if (
+            representation != "unavailable"
+            or relop["content"] != ""
+            or digest
+            or canonical_digest
+            or logical_ids
+        ):
+            raise ModelError("Unavailable final RelopTree fields must be empty.")
+        return set()
+    if representation == "text":
+        content = _text(relop["content"], "model.plan.final_relop.content")
+        digest_bytes = content.encode("utf-8")
+        try:
+            parsed_content = json.loads(content)
+        except json.JSONDecodeError:
+            parsed_content = None
+        canonical_bytes = (
+            json.dumps(
+                parsed_content,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            if isinstance(parsed_content, (dict, list)) and parsed_content
+            else None
+        )
+    elif representation == "json":
+        if not isinstance(relop["content"], (dict, list)) or not relop["content"]:
+            raise ModelError(
+                "JSON final RelopTree content must be a nonempty object or array."
+            )
+        digest_bytes = json.dumps(
+            relop["content"],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        canonical_bytes = digest_bytes
+    else:
+        raise ModelError(
+            "Available final RelopTree representation must be 'json' or 'text'."
+        )
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ModelError("Available final RelopTree requires a SHA-256 digest.")
+    if hashlib.sha256(digest_bytes).hexdigest() != digest:
+        raise ModelError("Final RelopTree digest does not match its exact local content.")
+    expected_canonical_digest = (
+        hashlib.sha256(canonical_bytes).hexdigest() if canonical_bytes else ""
+    )
+    if canonical_digest != expected_canonical_digest:
+        raise ModelError(
+            "Final RelopTree canonical digest does not match its structural JSON."
+        )
+    recorded: set[str] = set()
+    for index, logical_id in enumerate(logical_ids):
+        recorded.add(
+            _identifier(logical_id, f"model.plan.final_relop.logical_ids[{index}]")
+        )
+    derived = set(_logical_ids(relop["content"]))
+    if not derived:
+        raise ModelError("Final RelopTree has no deterministic logical operator identifiers.")
+    if recorded != derived:
+        raise ModelError(
+            "Final RelopTree logical_ids do not match identifiers derived from its content."
+        )
+    return recorded
+
+
+def _validate_optimizer_trace(
+    value: Any,
+    query: str,
+    cluster_uri: str,
+    final_relop_canonical_digest: str,
+    mode: str,
+    head: str,
+    project: str,
+) -> dict[str, Any]:
+    trace = _shape(
+        value,
+        (
+            "provenance",
+            "status",
+            "description",
+            "source_links",
+            "acquisition",
+            "captured_passes",
+        ),
+        "model.optimizer_trace",
+    )
+    provenance = trace["provenance"]
+    if provenance not in OPTIMIZER_TRACE_PROVENANCE:
+        raise ModelError("model.optimizer_trace.provenance is invalid.")
+    expected_status = {
+        "runtime_per_pass": "CAPTURED",
+        "source_schedule_only": "OUTCOME_NOT_CAPTURED",
+        "unavailable": "UNAVAILABLE",
+    }[provenance]
+    if trace["status"] != expected_status:
+        raise ModelError(
+            "model.optimizer_trace.status contradicts its provenance."
+        )
+    _text(trace["description"], "model.optimizer_trace.description")
+    links = _links(
+        trace["source_links"],
+        head,
+        project,
+        "model.optimizer_trace.source_links",
+        nonempty=provenance == "source_schedule_only",
+    )
+    if provenance == "unavailable" and links:
+        raise ModelError("Unavailable optimizer trace must not claim control-flow links.")
+    if mode == "ESTIMATED" and provenance == "runtime_per_pass":
+        raise ModelError("ESTIMATED mode cannot claim runtime per-pass optimizer snapshots.")
+    acquisition = _shape(
+        trace["acquisition"],
+        (
+            "authorization",
+            "workspace_kind",
+            "attempted",
+            "method",
+            "instrumentation_changed",
+            "build_attempted",
+            "build_succeeded",
+            "restart_attempted",
+            "restart_succeeded",
+            "command",
+            "non_executing",
+            "supplied_query_executed",
+            "request_scope_digest_sha256",
+            "cleanup_status",
+            "outcome",
+            "failure",
+            "raw_digest_sha256",
+            "driver_receipt",
+        ),
+        "model.optimizer_trace.acquisition",
+    )
+    authorization = acquisition["authorization"]
+    if authorization not in {"explicit_local", "read_only_only"}:
+        raise ModelError("Optimizer trace authorization is invalid.")
+    if acquisition["workspace_kind"] not in {
+        "local_development",
+        "remote_read_only",
+    }:
+        raise ModelError("Optimizer trace workspace kind is invalid.")
+    if (
+        authorization == "explicit_local"
+        and acquisition["workspace_kind"] != "local_development"
+    ):
+        raise ModelError(
+            "Explicit local optimizer authorization requires a local-development workspace."
+        )
+    if _boolean(acquisition["attempted"], "model.optimizer_trace.acquisition.attempted") is not True:
+        raise ModelError(
+            "A complete model requires an active optimizer trace acquisition attempt."
+        )
+    method = acquisition["method"]
+    if method not in {
+        "existing_non_executing_trace",
+        "request_scoped_local_instrumentation",
+    }:
+        raise ModelError("Optimizer trace acquisition method is invalid.")
+    instrumentation_changed = _boolean(
+        acquisition["instrumentation_changed"],
+        "model.optimizer_trace.acquisition.instrumentation_changed",
+    )
+    build_attempted = _boolean(
+        acquisition["build_attempted"],
+        "model.optimizer_trace.acquisition.build_attempted",
+    )
+    build_succeeded = _boolean(
+        acquisition["build_succeeded"],
+        "model.optimizer_trace.acquisition.build_succeeded",
+    )
+    restart_attempted = _boolean(
+        acquisition["restart_attempted"],
+        "model.optimizer_trace.acquisition.restart_attempted",
+    )
+    restart_succeeded = _boolean(
+        acquisition["restart_succeeded"],
+        "model.optimizer_trace.acquisition.restart_succeeded",
+    )
+    if build_succeeded and not build_attempted:
+        raise ModelError("Optimizer trace build cannot succeed without being attempted.")
+    if restart_succeeded and not restart_attempted:
+        raise ModelError("Optimizer trace restart cannot succeed without being attempted.")
+    if acquisition["command"] != f".show queryplan <|\n{query}":
+        raise ModelError(
+            "Optimizer trace acquisition must use the exact non-executing .show queryplan command."
+        )
+    if acquisition["non_executing"] is not True:
+        raise ModelError("Optimizer trace acquisition must be non-executing.")
+    if acquisition["supplied_query_executed"] is not False:
+        raise ModelError("Optimizer trace acquisition must never execute the supplied query.")
+    request_scope_digest = _text(
+        acquisition["request_scope_digest_sha256"],
+        "model.optimizer_trace.acquisition.request_scope_digest_sha256",
+    )
+    if not re.fullmatch(r"[0-9a-f]{64}", request_scope_digest):
+        raise ModelError("Optimizer trace request scope digest is invalid.")
+    cleanup_status = acquisition["cleanup_status"]
+    if cleanup_status not in {"not_required", "completed"}:
+        raise ModelError("Optimizer trace cleanup status is invalid.")
+    if method == "request_scoped_local_instrumentation":
+        if authorization != "explicit_local":
+            raise ModelError(
+                "Request-scoped optimizer instrumentation requires explicit local authorization."
+            )
+        if acquisition["workspace_kind"] != "local_development":
+            raise ModelError(
+                "Request-scoped optimizer instrumentation is restricted to local development."
+            )
+        parsed_cluster = urlparse(cluster_uri)
+        try:
+            cluster_address = ipaddress.ip_address(parsed_cluster.hostname or "")
+        except ValueError:
+            cluster_is_loopback = (parsed_cluster.hostname or "").lower() == "localhost"
+        else:
+            cluster_is_loopback = cluster_address.is_loopback
+        if not cluster_is_loopback or parsed_cluster.port is None:
+            raise ModelError(
+                "Request-scoped optimizer instrumentation requires a loopback query.cluster_uri with an explicit port."
+            )
+        if not instrumentation_changed or not build_attempted:
+            raise ModelError(
+                "Instrumented optimizer acquisition requires instrumentation and a build attempt."
+            )
+        if cleanup_status != "completed":
+            raise ModelError(
+                "Request-scoped optimizer instrumentation must be removed after capture."
+            )
+        if not links:
+            raise ModelError(
+                "Request-scoped optimizer instrumentation requires exact source links."
+            )
+    elif instrumentation_changed or cleanup_status != "not_required":
+        raise ModelError(
+            "Existing optimizer trace acquisition must not claim instrumentation changes."
+        )
+    outcome = acquisition["outcome"]
+    if outcome not in {"captured", "trace_unavailable"}:
+        raise ModelError("Optimizer trace acquisition outcome is invalid.")
+    if (
+        authorization == "explicit_local"
+        and outcome == "trace_unavailable"
+        and method != "request_scoped_local_instrumentation"
+    ):
+        raise ModelError(
+            "Explicit local authorization requires an instrumentation attempt before optimizer trace fallback."
+        )
+    failure = _text(
+        acquisition["failure"],
+        "model.optimizer_trace.acquisition.failure",
+        allow_empty=outcome == "captured",
+    )
+    raw_digest = _text(
+        acquisition["raw_digest_sha256"],
+        "model.optimizer_trace.acquisition.raw_digest_sha256",
+        allow_empty=outcome != "captured",
+    )
+    if outcome == "captured":
+        if provenance != "runtime_per_pass":
+            raise ModelError(
+                "Captured optimizer acquisition requires runtime_per_pass provenance and request scope."
+            )
+        if failure or not re.fullmatch(r"[0-9a-f]{64}", raw_digest):
+            raise ModelError(
+                "Captured optimizer acquisition requires a raw digest and no failure."
+            )
+        if method == "request_scoped_local_instrumentation" and not all(
+            (build_succeeded, restart_attempted, restart_succeeded)
+        ):
+            raise ModelError(
+                "Captured instrumented optimizer trace requires successful build and restart."
+            )
+    else:
+        if provenance == "runtime_per_pass" or not failure or raw_digest:
+            raise ModelError(
+                "Unavailable optimizer acquisition must record failure without captured evidence."
+            )
+    receipt = acquisition["driver_receipt"]
+    if method == "request_scoped_local_instrumentation":
+        receipt_location = "model.optimizer_trace.acquisition.driver_receipt"
+        receipt = _shape(
+            receipt,
+            (
+                "receipt_digest_sha256",
+                "source_head_digest_sha256",
+                "validated",
+                "base_ref_matches_source",
+                "detached_head_matches_source",
+                "worktree_isolated",
+                "ownership_marker_validated",
+                "loopback_endpoint_validated",
+                "port_was_free",
+                "preexisting_processes_preserved",
+                "build_job_object_assigned",
+                "service_job_object_assigned",
+                "build_timed_out",
+                "all_owned_processes_exited",
+                "service_stopped",
+                "port_released",
+                "worktree_registration_removed",
+                "worktree_path_removed",
+                "primary_checkout_preserved",
+                "cleanup_finally",
+                "outcome",
+                "trace_output_digest_sha256",
+            ),
+            receipt_location,
+        )
+        expected_receipt_outcome = "captured" if outcome == "captured" else "failed"
+        if receipt["outcome"] != expected_receipt_outcome:
+            raise ModelError(f"{receipt_location}.outcome contradicts acquisition.")
+        receipt_digest = _text(
+            receipt["receipt_digest_sha256"],
+            f"{receipt_location}.receipt_digest_sha256",
+        )
+        if not re.fullmatch(r"[0-9a-f]{64}", receipt_digest):
+            raise ModelError(f"{receipt_location}.receipt_digest_sha256 is invalid.")
+        source_head_digest = _text(
+            receipt["source_head_digest_sha256"],
+            f"{receipt_location}.source_head_digest_sha256",
+        )
+        if source_head_digest != hashlib.sha256(head.encode("utf-8")).hexdigest():
+            raise ModelError(
+                f"{receipt_location}.source_head_digest_sha256 does not match source.workspace_head."
+            )
+        safety_fields = (
+            "validated",
+            "base_ref_matches_source",
+            "worktree_isolated",
+            "ownership_marker_validated",
+            "loopback_endpoint_validated",
+            "port_was_free",
+            "preexisting_processes_preserved",
+            "all_owned_processes_exited",
+            "service_stopped",
+            "port_released",
+            "worktree_registration_removed",
+            "worktree_path_removed",
+            "primary_checkout_preserved",
+            "cleanup_finally",
+        )
+        for key in safety_fields:
+            if receipt[key] is not True:
+                raise ModelError(f"{receipt_location}.{key} must be true.")
+        for key in (
+            "detached_head_matches_source",
+            "build_job_object_assigned",
+            "service_job_object_assigned",
+            "build_timed_out",
+        ):
+            _boolean(receipt[key], f"{receipt_location}.{key}")
+        if outcome == "captured" and (
+            receipt["detached_head_matches_source"] is not True
+            or receipt["build_job_object_assigned"] is not True
+            or receipt["service_job_object_assigned"] is not True
+            or receipt["build_timed_out"] is not False
+        ):
+            raise ModelError(
+                f"{receipt_location} lacks captured worktree/process containment proof."
+            )
+        trace_output_digest = _text(
+            receipt["trace_output_digest_sha256"],
+            f"{receipt_location}.trace_output_digest_sha256",
+            allow_empty=outcome != "captured",
+        )
+        if outcome == "captured" and trace_output_digest != raw_digest:
+            raise ModelError(
+                f"{receipt_location}.trace_output_digest_sha256 must match acquisition raw digest."
+            )
+        if outcome != "captured" and trace_output_digest:
+            raise ModelError(
+                f"{receipt_location} failed capture must not claim a trace output digest."
+            )
+    elif receipt != {}:
+        raise ModelError(
+            "Only request-scoped local instrumentation may include a driver receipt."
+        )
+    captured_passes = _list(
+        trace["captured_passes"],
+        "model.optimizer_trace.captured_passes",
+        nonempty=provenance == "runtime_per_pass",
+    )
+    captured_by_id: dict[str, dict[str, Any]] = {}
+    for index, pass_value in enumerate(captured_passes):
+        location = f"model.optimizer_trace.captured_passes[{index}]"
+        captured_pass = _shape(
+            pass_value,
+            (
+                "id",
+                "sequence",
+                "phase",
+                "concrete_pass",
+                "request_scope_digest_sha256",
+                "changed",
+                "before",
+                "after",
+                "before_digest_sha256",
+                "after_digest_sha256",
+            ),
+            location,
+        )
+        pass_id = _identifier(captured_pass["id"], f"{location}.id")
+        if pass_id in captured_by_id:
+            raise ModelError(f"{location}.id is duplicated.")
+        sequence = _integer(
+            captured_pass["sequence"], f"{location}.sequence", minimum=1
+        )
+        if sequence != index + 1:
+            raise ModelError(
+                f"{location}.sequence must be strictly increasing from 1."
+            )
+        if captured_pass["phase"] not in {
+            "initial-optimize",
+            "partial-queries",
+            "final-optimize",
+        }:
+            raise ModelError(f"{location}.phase is invalid.")
+        concrete_pass = _text(
+            captured_pass["concrete_pass"], f"{location}.concrete_pass"
+        )
+        if not re.fullmatch(r"[A-Za-z0-9_.+`]+", concrete_pass):
+            raise ModelError(f"{location}.concrete_pass is invalid.")
+        if captured_pass["request_scope_digest_sha256"] != request_scope_digest:
+            raise ModelError(
+                f"{location}.request_scope_digest_sha256 does not match acquisition."
+            )
+        changed = _boolean(captured_pass["changed"], f"{location}.changed")
+        before = _text(captured_pass["before"], f"{location}.before")
+        after = _text(captured_pass["after"], f"{location}.after")
+        try:
+            before_json = json.loads(before)
+            after_json = json.loads(after)
+        except json.JSONDecodeError as exc:
+            raise ModelError(f"{location} snapshots must be parseable Relop JSON.") from exc
+        for label, text, decoded in (
+            ("before", before, before_json),
+            ("after", after, after_json),
+        ):
+            if not isinstance(decoded, (dict, list)) or not decoded:
+                raise ModelError(
+                    f"{location}.{label} must decode to a nonempty Relop object/array."
+                )
+            canonical_text = json.dumps(
+                decoded, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            )
+            if text != canonical_text:
+                raise ModelError(f"{location}.{label} must be canonical Relop JSON.")
+        before_digest = _text(
+            captured_pass["before_digest_sha256"],
+            f"{location}.before_digest_sha256",
+        )
+        after_digest = _text(
+            captured_pass["after_digest_sha256"],
+            f"{location}.after_digest_sha256",
+        )
+        if hashlib.sha256(before.encode("utf-8")).hexdigest() != before_digest:
+            raise ModelError(f"{location} before digest does not match.")
+        if hashlib.sha256(after.encode("utf-8")).hexdigest() != after_digest:
+            raise ModelError(f"{location} after digest does not match.")
+        if changed is not (before_digest != after_digest):
+            raise ModelError(f"{location}.changed contradicts its snapshots.")
+        if index and (
+            captured_passes[index - 1]["after_digest_sha256"] != before_digest
+        ):
+            raise ModelError(f"{location} breaks pass-to-pass continuity.")
+        captured_by_id[pass_id] = captured_pass
+    if provenance != "runtime_per_pass" and captured_passes:
+        raise ModelError(
+            "Only runtime_per_pass provenance may contain captured pass snapshots."
+        )
+    if provenance == "runtime_per_pass" and (
+        captured_passes[-1]["after_digest_sha256"]
+        != final_relop_canonical_digest
+    ):
+        raise ModelError(
+            "Terminal optimizer snapshot digest must equal "
+            "plan.final_relop.canonical_digest_sha256."
+        )
+    return {**trace, "_captured_by_id": captured_by_id}
+
+
 def _model_operator_topology(roots: list[Any]) -> tuple[Any, ...]:
     def node(value: dict[str, Any]) -> tuple[Any, ...]:
         return (
@@ -978,6 +1653,7 @@ def _validate_physical(
     head: str,
     project: str,
     location: str,
+    final_logical_ids: set[str],
 ) -> set[str]:
     physical = _shape(
         value,
@@ -1022,6 +1698,7 @@ def _validate_physical(
     roots = _list(full_plan["roots"], f"{location}.full_plan.roots", nonempty=True)
     operator_ids: set[str] = set()
     node_ids: set[str] = set()
+    operator_logical_ids: dict[str, set[str]] = {}
     actual_count = sum(
         _validate_operator(
             root,
@@ -1030,6 +1707,8 @@ def _validate_physical(
             f"{location}.full_plan.roots[{index}]",
             operator_ids,
             node_ids,
+            final_logical_ids,
+            operator_logical_ids,
         )
         for index, root in enumerate(roots)
     )
@@ -1044,14 +1723,40 @@ def _validate_physical(
         f"{location}.logical_to_physical",
         nonempty=True,
     )
+    mapped_logical_ids: set[str] = set()
+    mapped_pairs: set[tuple[str, str]] = set()
     for index, mapping_value in enumerate(mappings):
         mapping_location = f"{location}.logical_to_physical[{index}]"
         mapping = _shape(
             mapping_value,
-            ("logical_id", "physical_operator_ids", "reason", "source_links"),
+            (
+                "logical_id",
+                "physical_operator_ids",
+                "builder_method",
+                "reason",
+                "source_links",
+            ),
             mapping_location,
         )
-        _identifier(mapping["logical_id"], f"{mapping_location}.logical_id")
+        logical_id = _identifier(
+            mapping["logical_id"], f"{mapping_location}.logical_id"
+        )
+        if final_logical_ids and logical_id not in final_logical_ids:
+            raise ModelError(
+                f"{mapping_location}.logical_id is absent from the final RelopTree."
+            )
+        if logical_id in mapped_logical_ids:
+            raise ModelError(
+                f"{mapping_location}.logical_id duplicates another lowering mapping."
+            )
+        mapped_logical_ids.add(logical_id)
+        builder_method = _text(
+            mapping["builder_method"], f"{mapping_location}.builder_method"
+        )
+        if ".visit" not in builder_method.lower():
+            raise ModelError(
+                f"{mapping_location}.builder_method must name the source Visit* lowering method."
+            )
         mapped_ids = _list(
             mapping["physical_operator_ids"],
             f"{mapping_location}.physical_operator_ids",
@@ -1062,16 +1767,41 @@ def _validate_physical(
                 mapped_id,
                 f"{mapping_location}.physical_operator_ids[{mapped_index}]",
             )
+        if len(set(mapped_ids)) != len(mapped_ids):
+            raise ModelError(
+                f"{mapping_location}.physical_operator_ids must be unique."
+            )
         if not set(mapped_ids) <= operator_ids:
             raise ModelError(
                 f"{mapping_location}.physical_operator_ids references an absent operator."
             )
+        for mapped_id in mapped_ids:
+            pair = (logical_id, mapped_id)
+            if pair in mapped_pairs:
+                raise ModelError(f"{mapping_location} duplicates a logical/physical pair.")
+            mapped_pairs.add(pair)
+            if logical_id not in operator_logical_ids[mapped_id]:
+                raise ModelError(
+                    f"{mapping_location} contradicts {mapped_id}.logical_operator_ids."
+                )
         _text(mapping["reason"], f"{mapping_location}.reason")
         _links(
             mapping["source_links"],
             head,
             project,
             f"{mapping_location}.source_links",
+        )
+    if {
+        mapped_id
+        for mapping in mappings
+        for mapped_id in mapping["physical_operator_ids"]
+    } != operator_ids:
+        raise ModelError(
+            f"{location}.logical_to_physical must cover every evidenced physical operator."
+        )
+    if final_logical_ids and mapped_logical_ids != final_logical_ids:
+        raise ModelError(
+            f"{location}.logical_to_physical must cover every final Relop logical ID."
         )
     for index, section_value in enumerate(physical.get("raw_plan_sections", [])):
         section_location = f"{location}.raw_plan_sections[{index}]"
@@ -1487,6 +2217,10 @@ def _validate_runner(
     expected_runner_mode: str,
     expected_scenario_count: int,
     expected_key: str,
+    optimizer_trace: dict[str, Any],
+    final_logical_ids: set[str],
+    used_trace_pass_ids: set[str],
+    used_trace_sequences: list[int],
 ) -> None:
     common = (
         "type",
@@ -1532,6 +2266,22 @@ def _validate_runner(
             raise ModelError(
                 f"{location}.actions[{index}].evidence_kind must match its no-op outcome."
             )
+        if runner_type == "pass" and stage_id in {
+            "initial-optimize",
+            "partial-queries",
+            "final-optimize",
+        }:
+            if action["evidence_kind"] != badge:
+                raise ModelError(
+                    f"{location}.actions[{index}].evidence_kind must match optimizer trace outcome."
+                )
+            if badge in UNCAPTURED_KINDS and (
+                action["before"] != action["after"]
+                or "OUTCOME NOT CAPTURED" not in action["before"].upper()
+            ):
+                raise ModelError(
+                    f"{location}.actions[{index}] must explicitly show OUTCOME NOT CAPTURED."
+                )
     _unique(actions, lambda item: item["id"], f"{location}.actions", "action id")
     if runner_type == "boundary":
         actual_lanes = tuple(action["lane"] for action in actions)
@@ -1614,7 +2364,18 @@ def _validate_runner(
                     )
     elif runner_type == "pass":
         _validate_pass(
-            runner["pass"], badge, mode, head, project, f"{location}.pass"
+            runner["pass"],
+            stage_id,
+            badge,
+            mode,
+            head,
+            project,
+            f"{location}.pass",
+            optimizer_trace,
+            stage_id
+            in {"initial-optimize", "partial-queries", "final-optimize"},
+            used_trace_pass_ids,
+            used_trace_sequences,
         )
     elif runner_type == "physical":
         evidence_refs.update(
@@ -1626,6 +2387,7 @@ def _validate_runner(
                 head,
                 project,
                 f"{location}.physical",
+                final_logical_ids,
             )
         )
     elif runner_type == "boundary":
@@ -1663,6 +2425,10 @@ def _validate_substep(
     expected_item_count: int,
     expected_runner_mode: str,
     expected_scenario_count: int,
+    optimizer_trace: dict[str, Any],
+    final_logical_ids: set[str],
+    used_trace_pass_ids: set[str],
+    used_trace_sequences: list[int],
 ) -> str:
     required = (
         "id",
@@ -1715,6 +2481,7 @@ def _validate_substep(
         project,
         f"{location}.artifact",
         no_op=badge in NO_OP_KINDS,
+        outcome_not_captured=badge in UNCAPTURED_KINDS,
     )
     if expected_runner_type is None:
         if "runner" in substep:
@@ -1739,6 +2506,10 @@ def _validate_substep(
             expected_runner_mode,
             expected_scenario_count,
             expected_key,
+            optimizer_trace,
+            final_logical_ids,
+            used_trace_pass_ids,
+            used_trace_sequences,
         )
     return badge
 
@@ -1921,6 +2692,7 @@ def validate_complete_model(model: dict[str, Any]) -> None:
         "query",
         "source",
         "plan",
+        "optimizer_trace",
         "network_beacon",
         "stages",
     )
@@ -1983,6 +2755,7 @@ def validate_complete_model(model: dict[str, Any]) -> None:
             "digest_sha256",
             "sanitized_digest_sha256",
             "sanitized_queryplan",
+            "final_relop",
             "operator_count",
             "complete_physical_queryplan",
             "provenance",
@@ -2015,11 +2788,23 @@ def validate_complete_model(model: dict[str, Any]) -> None:
     plan_topology = _validate_sanitized_queryplan(
         plan["sanitized_queryplan"], mode, sanitized_digest, plan_count
     )
+    final_logical_ids = _validate_final_relop(plan["final_relop"], mode)
+    optimizer_trace = _validate_optimizer_trace(
+        model["optimizer_trace"],
+        query["text"],
+        query["cluster_uri"],
+        plan["final_relop"]["canonical_digest_sha256"],
+        mode,
+        head,
+        project,
+    )
 
     stages = _list(model["stages"], "model.stages")
     if len(stages) != len(STAGES):
         raise ModelError("model.stages must contain exactly ten stages.")
     evidence_refs: set[str] = set()
+    used_trace_pass_ids: set[str] = set()
+    used_trace_sequences: list[int] = []
     for index, ((expected_id, expected_title, expected_kind), stage_value) in enumerate(
         zip(STAGES, stages, strict=True)
     ):
@@ -2100,6 +2885,10 @@ def validate_complete_model(model: dict[str, Any]) -> None:
                 expected_substep.item_count,
                 expected_substep.runner_mode,
                 expected_substep.scenario_count,
+                optimizer_trace,
+                final_logical_ids,
+                used_trace_pass_ids,
+                used_trace_sequences,
             )
             for substep_index, (substep, expected_substep) in enumerate(
                 zip(substeps, expected_substeps, strict=True)
@@ -2119,6 +2908,16 @@ def validate_complete_model(model: dict[str, Any]) -> None:
             raise ModelError(
                 f"{location}.evidence_kind contradicts its substep change badges."
             )
+        if evidence_kind == "EXECUTED_OUTCOME_NOT_CAPTURED" and badge_set != {
+            "EXECUTED_OUTCOME_NOT_CAPTURED"
+        }:
+            raise ModelError(
+                f"{location}.evidence_kind contradicts its untraced executed outcomes."
+            )
+        if evidence_kind == "NOT_TRACED" and badge_set != {"NOT_TRACED"}:
+            raise ModelError(
+                f"{location}.evidence_kind contradicts its unavailable trace outcomes."
+            )
         if evidence_kind == "NO_OP" and badge_set != {"NO_OP"}:
             raise ModelError(
                 f"{location}.evidence_kind contradicts its substep change badges."
@@ -2131,12 +2930,24 @@ def validate_complete_model(model: dict[str, Any]) -> None:
                 if "TRANSFORMED" in badges
                 else "SCHEDULED_NO_OP"
                 if set(badges) == {"SCHEDULED_NO_OP"}
+                else "EXECUTED_OUTCOME_NOT_CAPTURED"
+                if set(badges) == {"EXECUTED_OUTCOME_NOT_CAPTURED"}
+                else "NOT_TRACED"
+                if set(badges) == {"NOT_TRACED"}
                 else evidence_kind
             )
             if evidence_kind != derived:
                 raise ModelError(
                     f"{location}.evidence_kind contradicts its pass runner outcomes."
                 )
+    if used_trace_pass_ids != set(optimizer_trace["_captured_by_id"]):
+        raise ModelError(
+            "Every captured optimizer pass snapshot must map to exactly one optimizer pass."
+        )
+    if used_trace_sequences != list(range(1, len(used_trace_sequences) + 1)):
+        raise ModelError(
+            "Optimizer trace sequences must bind to model passes in canonical phase/order."
+        )
 
 
 def safe_json_for_html(value: Any) -> str:

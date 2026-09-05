@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "spec_path": "references/query-lifecycle-two-level-walkthrough.spec.md",
-  "spec_sha256": "63b9cf2ad7f8c8e0169e6300f6c82df4e5e2957472de6f4d54492833c7a73206",
+  "spec_sha256": "451568b906d2a804aff1ad1df4f5efef902723bb1cebdcba79bb23935755e500",
   "acceptance_item_count": 93,
   "automated_count": 93,
   "manual_count": 0,
@@ -16,6 +16,20 @@
         "references/evidence-collection.md"
       ],
       "canonical_spec_impact": "none"
+    },
+    {
+      "id": "WE-FINAL-RELOP-AND-OPTIMIZER-TRACE",
+      "scope": "plan evidence, optimizer attribution, and physical lowering",
+      "reason": "Render the actual final RelopTree, prohibit pass-history inference from final states, actively acquire request-scoped pass snapshots when locally authorized through an isolated Job-Object driver, retain only sanitized receipt proofs, and source-ground logical-to-physical lowering.",
+      "implementation": [
+        "scripts/plan_recovery.py",
+        "scripts/local_trace_driver.py",
+        "scripts/optimizer_trace.py",
+        "scripts/model_contract.py",
+        "assets/walkthrough-template.html",
+        "references/evidence-model.schema.json"
+      ],
+      "canonical_spec_impact": "additive evidence-integrity extension"
     }
   ],
   "parameterizations": [
@@ -36,8 +50,8 @@
     },
     {
       "item_id": "AC-6FFCBFC759F3545E",
-      "reason": "The five-of-22 transformation result is canonical example data; reusable runs preserve the 22-position lab but derive transformation versus scheduled-no-op outcomes from query evidence.",
-      "verification": "validate_complete_model verifies every pass outcome and its before/after evidence; the rich fixture reproduces the canonical five-of-22 state."
+      "reason": "The five-of-22 transformation result is canonical example data; reusable runs preserve the 22-position lab but classify TRANSFORMED or SCHEDULED_NO_OP only from runtime per-pass snapshots.",
+      "verification": "validate_complete_model verifies trace provenance and per-pass snapshot digests; source-only schedules render EXECUTED_OUTCOME_NOT_CAPTURED."
     },
     {
       "item_id": "AC-2670B83728DD0691",

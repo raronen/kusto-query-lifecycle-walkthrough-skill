@@ -27,6 +27,7 @@ SERIALIZED_CHILD_KEYS = {
     "extensions",
 }
 LOGICAL_MARKERS = {"logicalplan", "relop", "reloptree", "replotree"}
+FINAL_RELOP_KEYS = {"relop", "reloptree", "relop_tree", "replotree", "logicalplan"}
 PHYSICAL_TYPE_RE = re.compile(
     r"^Kusto\.DataNode\.DataEngineQueryPlan\.([A-Za-z_][A-Za-z0-9_]*)(?:,\s*DataNode)?$"
 )
@@ -121,6 +122,203 @@ def _collect_queryplan_cells(value: Any) -> list[Any]:
     return cells
 
 
+def _collect_final_relop_cells(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        cells: list[Any] = []
+        for item in value:
+            cells.extend(_collect_final_relop_cells(item))
+        return cells
+    if not isinstance(value, dict):
+        return []
+
+    for key, item in value.items():
+        if key.lower() in FINAL_RELOP_KEYS:
+            return [item]
+
+    lowered = {key.lower(): item for key, item in value.items()}
+    if (
+        str(lowered.get("resulttype", "")).lower() in FINAL_RELOP_KEYS
+        and "content" in lowered
+    ):
+        return [lowered["content"]]
+
+    columns = value.get("Columns", value.get("columns"))
+    rows = value.get("Rows", value.get("rows"))
+    if isinstance(columns, list) and isinstance(rows, list):
+        names = [
+            column.get("ColumnName", column.get("columnName", column.get("Name", "")))
+            if isinstance(column, dict)
+            else str(column)
+            for column in columns
+        ]
+        lowered_names = [str(name).lower() for name in names]
+        relop_indexes = [
+            index for index, name in enumerate(lowered_names) if name in FINAL_RELOP_KEYS
+        ]
+        if relop_indexes:
+            index = relop_indexes[0]
+            return [
+                row[index]
+                for row in rows
+                if isinstance(row, list) and len(row) > index
+            ]
+        if "resulttype" in lowered_names and "content" in lowered_names:
+            result_index = lowered_names.index("resulttype")
+            content_index = lowered_names.index("content")
+            return [
+                row[content_index]
+                for row in rows
+                if isinstance(row, list)
+                and len(row) > max(result_index, content_index)
+                and str(row[result_index]).lower() in FINAL_RELOP_KEYS
+            ]
+
+    cells: list[Any] = []
+    for key in ("Rows", "rows", "Tables", "tables", "PrimaryResult", "primaryResult"):
+        if key in value:
+            cells.extend(_collect_final_relop_cells(value[key]))
+    return cells
+
+
+def _logical_identifier(value: Any) -> str | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int) and value >= 0:
+        return f"logical-node-{value}"
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = re.sub(r"[^a-z0-9._-]+", "-", value.strip().lower()).strip("-")
+    if not normalized:
+        return None
+    return normalized if normalized.startswith("logical-") else f"logical-{normalized}"
+
+
+def _logical_ids(value: Any) -> list[str]:
+    found: set[str] = set()
+
+    def visit(item: Any) -> None:
+        if isinstance(item, list):
+            for child in item:
+                visit(child)
+            return
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if key.lower() in {"id", "nodeid", "relopid", "logicalid", "logical_id"}:
+                    identifier = _logical_identifier(child)
+                    if identifier:
+                        found.add(identifier)
+                visit(child)
+            return
+        if isinstance(item, str):
+            try:
+                parsed = json.loads(item)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, (dict, list)):
+                found.update(_logical_ids(parsed))
+            found.update(
+                match.lower()
+                for match in re.findall(
+                    r"(?<![A-Za-z0-9_.-])logical-[A-Za-z0-9_.-]+", item
+                )
+            )
+            for match in re.findall(
+                r"(?i)\b(?:nodeid|relopid|logicalid)\s*[:=]\s*[\"']?([A-Za-z0-9_.-]+)",
+                item,
+            ):
+                identifier = _logical_identifier(match)
+                if identifier:
+                    found.add(identifier)
+
+    visit(value)
+    if not found and isinstance(value, str):
+        found.add(
+            "logical-text-"
+            + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+        )
+    if not found and isinstance(value, (dict, list)):
+        def add_paths(item: Any, path: str) -> None:
+            if isinstance(item, dict):
+                found.add(path)
+                for key, child in item.items():
+                    segment = re.sub(
+                        r"[^a-z0-9._-]+", "-", str(key).lower()
+                    ).strip("-")
+                    if isinstance(child, (dict, list)):
+                        add_paths(child, f"{path}.{segment or 'field'}")
+            elif isinstance(item, list):
+                for index, child in enumerate(item):
+                    if isinstance(child, (dict, list)):
+                        add_paths(child, f"{path}.{index}")
+
+        add_paths(value, "logical-root")
+    return sorted(found)
+
+
+def _final_relop_record(cell: Any) -> dict[str, Any]:
+    canonical_digest = ""
+    if isinstance(cell, str):
+        if not cell.strip():
+            raise PlanRecoveryError("The final RelopTree payload is empty.")
+        content: Any = cell
+        representation = "text"
+        digest_bytes = cell.encode("utf-8")
+        try:
+            parsed = json.loads(cell)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, (dict, list)) and parsed:
+            canonical_bytes = json.dumps(
+                parsed, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            canonical_digest = hashlib.sha256(canonical_bytes).hexdigest()
+    elif isinstance(cell, (dict, list)):
+        if not cell:
+            raise PlanRecoveryError("The final RelopTree payload is empty.")
+        content = cell
+        representation = "json"
+        digest_bytes = json.dumps(
+            cell, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        canonical_digest = hashlib.sha256(digest_bytes).hexdigest()
+    else:
+        raise PlanRecoveryError(
+            "The final RelopTree payload must be a JSON object/array or nonempty serialized text."
+        )
+    logical_ids = _logical_ids(content)
+    return {
+        "available": True,
+        "representation": representation,
+        "content": content,
+        "digest_sha256": hashlib.sha256(digest_bytes).hexdigest(),
+        "canonical_digest_sha256": canonical_digest,
+        "logical_ids": logical_ids,
+    }
+
+
+def unavailable_final_relop() -> dict[str, Any]:
+    return {
+        "available": False,
+        "representation": "unavailable",
+        "content": "",
+        "digest_sha256": "",
+        "canonical_digest_sha256": "",
+        "logical_ids": [],
+    }
+
+
+def extract_final_relop(payload: Any) -> dict[str, Any]:
+    decoded = _decode_json(payload, "Relop payload")
+    if not isinstance(decoded, (dict, list)):
+        raise PlanRecoveryError("The response must be a JSON object or a row array.")
+    cells = _collect_final_relop_cells(decoded)
+    if len(cells) != 1:
+        if not cells:
+            raise PlanRecoveryError("The response has no final RelopTree payload.")
+        raise PlanRecoveryError("The response must contain exactly one final RelopTree payload.")
+    return _final_relop_record(cells[0])
+
+
 def _queryplan_cell(payload: Any) -> Any:
     payload = _decode_json(payload, "Payload")
     if not isinstance(payload, (dict, list)):
@@ -131,7 +329,11 @@ def _queryplan_cell(payload: Any) -> Any:
     if len(cells) > 1:
         raise PlanRecoveryError("The response must contain exactly one QueryPlan cell.")
     if isinstance(payload, dict) and "RootOperator" in payload:
-        return payload
+        return {
+            key: value
+            for key, value in payload.items()
+            if key.lower() not in FINAL_RELOP_KEYS
+        }
     if isinstance(payload, dict) and any(
         key.lower() in LOGICAL_MARKERS | {"queryhints", "statistics"} for key in payload
     ):
@@ -291,7 +493,9 @@ def _sanitize_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def inspect_queryplan_payload(payload: Any) -> dict[str, Any]:
+def inspect_queryplan_payload(
+    payload: Any, *, final_relop_payload: Any | None = None
+) -> dict[str, Any]:
     if isinstance(payload, bytes):
         raw_bytes = payload
     elif isinstance(payload, str):
@@ -306,6 +510,8 @@ def inspect_queryplan_payload(payload: Any) -> dict[str, Any]:
     _validate_flags(decoded_payload, "Response")
     cell = _queryplan_cell(decoded_payload)
     operator_count = _validate_physical_plan(cell)
+    relop_source = payload if final_relop_payload is None else final_relop_payload
+    final_relop = extract_final_relop(relop_source)
     sanitized = _sanitize_plan(cell)
     sanitized_bytes = json.dumps(
         sanitized, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -316,11 +522,22 @@ def inspect_queryplan_payload(payload: Any) -> dict[str, Any]:
         "digest_sha256": hashlib.sha256(raw_bytes).hexdigest(),
         "sanitized_digest_sha256": hashlib.sha256(sanitized_bytes).hexdigest(),
         "sanitized_queryplan": sanitized,
+        "final_relop": final_relop,
     }
 
 
-def pending_recovery(query: str, *, automatic_deficiency: str) -> dict[str, Any]:
+def pending_recovery(
+    query: str,
+    *,
+    automatic_deficiency: str,
+    final_relop_payload: Any | None = None,
+) -> dict[str, Any]:
     return {
+        "final_relop": (
+            extract_final_relop(final_relop_payload)
+            if final_relop_payload is not None
+            else unavailable_final_relop()
+        ),
         "complete_physical_queryplan": False,
         "provenance": "pending",
         "recovery": {
@@ -358,7 +575,8 @@ def build_recovery_prompt(
         f"{command}\n"
         "```\n\n"
         "Can you paste the QueryPlan result cell/JSON here, or, if it is too large, attach it "
-        "or save it locally and provide the file path?"
+        "or save it locally and provide the file path? If automatic evidence did not include "
+        "the final RelopTree, copy the complete .show queryplan response so both artifacts are present."
     )
 
 
@@ -444,12 +662,15 @@ def accepted_recovery(
     tool: str,
     collected_at_utc: str,
     prompt_record: dict[str, Any] | None = None,
+    final_relop_payload: Any | None = None,
 ) -> dict[str, Any]:
     if provenance not in {"automatic", "user_supplied"}:
         raise PlanRecoveryError("Accepted evidence provenance must be automatic or user_supplied.")
     if not is_utc_timestamp(collected_at_utc):
         raise PlanRecoveryError("Collection timestamp must be UTC RFC 3339.")
-    result = inspect_queryplan_payload(payload)
+    result = inspect_queryplan_payload(
+        payload, final_relop_payload=final_relop_payload
+    )
     if result["complete"] is not True:
         raise PlanRecoveryError("Accepted evidence did not pass complete QueryPlan inspection.")
     prompted = provenance == "user_supplied"
@@ -478,6 +699,7 @@ def accepted_recovery(
         "digest_sha256": result["digest_sha256"],
         "sanitized_digest_sha256": result["sanitized_digest_sha256"],
         "sanitized_queryplan": result["sanitized_queryplan"],
+        "final_relop": result["final_relop"],
         "operator_count": result["operator_count"],
         "complete_physical_queryplan": True,
         "provenance": provenance,
@@ -489,14 +711,21 @@ def estimated_recovery(
     prompt_record: dict[str, Any],
     *,
     outcome: str,
+    final_relop_payload: Any | None = None,
 ) -> dict[str, Any]:
     if outcome not in {"user_declined", "user_could_not_provide", "user_chose_after_rejection"}:
         raise PlanRecoveryError("ESTIMATED fallback requires an explicit user recovery outcome.")
     recovery = _require_prompt_record(prompt_record)
     recovery["outcome"] = outcome
+    final_relop = (
+        extract_final_relop(final_relop_payload)
+        if final_relop_payload is not None
+        else unavailable_final_relop()
+    )
     return {
         "sanitized_digest_sha256": "",
         "sanitized_queryplan": {},
+        "final_relop": final_relop,
         "complete_physical_queryplan": False,
         "provenance": "estimated_after_recovery",
         "recovery": recovery,

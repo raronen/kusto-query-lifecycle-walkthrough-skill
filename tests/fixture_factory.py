@@ -198,6 +198,10 @@ def rich_model() -> dict[str, Any]:
                         else outcome
                     )
                     item["title"] = f"Applicable {stage['title']} synthetic pass"
+                    item["concrete_pass"] = (
+                        f"Synthetic.{stage_id.replace('-', '_')}."
+                        f"Pass{item_index + 1}"
+                    )
                     item["outcome"] = item_outcome
                     item["before"] = f"{substep['id']}: cumulative before"
                     item["after"] = (
@@ -205,6 +209,13 @@ def rich_model() -> dict[str, Any]:
                         if item_outcome == "SCHEDULED_NO_OP"
                         else f"{substep['id']}: cumulative after"
                     )
+                    item["runtime_evidence"] = {
+                        "captured": False,
+                        "trace_pass_id": "",
+                        "sequence": 0,
+                        "before_digest_sha256": "",
+                        "after_digest_sha256": "",
+                    }
                 runner["pass"]["cumulative_before"] = f"{substep['id']}: cumulative before"
                 runner["pass"]["cumulative_after"] = (
                     runner["pass"]["cumulative_before"]
@@ -221,12 +232,14 @@ def rich_model() -> dict[str, Any]:
             {
                 "logical_id": "logical-op-filter",
                 "physical_operator_ids": ["op-filter"],
+                "builder_method": "InitialQueryPlanBuilder.VisitFilter",
                 "reason": "The synthetic logical filter maps to the physical filter.",
                 "source_links": [],
             },
             {
                 "logical_id": "logical-op-source",
                 "physical_operator_ids": ["op-source"],
+                "builder_method": "InitialQueryPlanBuilder.VisitTable",
                 "reason": "The synthetic logical source maps to the physical source.",
                 "source_links": [],
             },
@@ -297,6 +310,84 @@ def rich_model() -> dict[str, Any]:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+    final_relop = {
+        "Kind": "Filter",
+        "LogicalId": "logical-op-filter",
+        "Input": {
+            "Kind": "Table",
+            "LogicalId": "logical-op-source",
+        },
+    }
+    final_relop_bytes = json.dumps(
+        final_relop,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    optimizer_items = [
+        (stage["id"], item)
+        for stage in stages
+        if stage["kind"] == "optimizer"
+        for substep in stage["substeps"]
+        if "runner" in substep and substep["runner"]["type"] == "pass"
+        for item in substep["runner"]["pass"]["applicable_passes"]
+    ]
+    current_snapshot = json.dumps(
+        {
+            "Kind": "Initial",
+            "LogicalId": "logical-op-filter",
+            "Revision": 0,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    captured_passes: list[dict[str, Any]] = []
+    for sequence, (phase, item) in enumerate(optimizer_items, start=1):
+        before = current_snapshot
+        if sequence == len(optimizer_items):
+            after = final_relop_bytes.decode("utf-8")
+        elif item["outcome"] == "SCHEDULED_NO_OP":
+            after = before
+        else:
+            after = json.dumps(
+                {
+                    "Kind": "Intermediate",
+                    "LogicalId": "logical-op-filter",
+                    "Revision": sequence,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        before_digest = hashlib.sha256(before.encode("utf-8")).hexdigest()
+        after_digest = hashlib.sha256(after.encode("utf-8")).hexdigest()
+        item["before"] = before
+        item["after"] = after
+        item["runtime_evidence"] = {
+            "captured": True,
+            "trace_pass_id": item["id"],
+            "sequence": sequence,
+            "before_digest_sha256": before_digest,
+            "after_digest_sha256": after_digest,
+        }
+        captured_passes.append(
+            {
+                "id": item["id"],
+                "sequence": sequence,
+                "phase": phase,
+                "concrete_pass": item["concrete_pass"],
+                "request_scope_digest_sha256": hashlib.sha256(
+                    b"synthetic-request-scope"
+                ).hexdigest(),
+                "changed": before_digest != after_digest,
+                "before": before,
+                "after": after,
+                "before_digest_sha256": before_digest,
+                "after_digest_sha256": after_digest,
+            }
+        )
+        current_snapshot = after
     return {
         "schema_version": "2.0",
         "model_state": "COMPLETE",
@@ -315,6 +406,39 @@ def rich_model() -> dict[str, Any]:
             "repository": "Azure-Kusto-Service",
             "workspace_head": HEAD,
         },
+        "optimizer_trace": {
+            "provenance": "runtime_per_pass",
+            "status": "CAPTURED",
+            "description": (
+                "Synthetic runtime per-pass snapshots capture each optimizer pass input and output."
+            ),
+            "source_links": [source_link("Synthetic optimizer trace evidence", 8)],
+            "acquisition": {
+                "authorization": "explicit_local",
+                "workspace_kind": "local_development",
+                "attempted": True,
+                "method": "existing_non_executing_trace",
+                "instrumentation_changed": False,
+                "build_attempted": False,
+                "build_succeeded": False,
+                "restart_attempted": False,
+                "restart_succeeded": False,
+                "command": f".show queryplan <|\n{QUERY}",
+                "non_executing": True,
+                "supplied_query_executed": False,
+                "request_scope_digest_sha256": hashlib.sha256(
+                    b"synthetic-request-scope"
+                ).hexdigest(),
+                "cleanup_status": "not_required",
+                "outcome": "captured",
+                "failure": "",
+                "raw_digest_sha256": hashlib.sha256(
+                    b"synthetic-optimizer-trace"
+                ).hexdigest(),
+                "driver_receipt": {},
+            },
+            "captured_passes": captured_passes,
+        },
         "plan": {
             "tool": "synthetic non-executing plan fixture",
             "collected_at_utc": "2026-01-01T00:00:00Z",
@@ -324,6 +448,16 @@ def rich_model() -> dict[str, Any]:
                 sanitized_plan_bytes
             ).hexdigest(),
             "sanitized_queryplan": sanitized_queryplan,
+            "final_relop": {
+                "available": True,
+                "representation": "json",
+                "content": final_relop,
+                "digest_sha256": hashlib.sha256(final_relop_bytes).hexdigest(),
+                "canonical_digest_sha256": hashlib.sha256(
+                    final_relop_bytes
+                ).hexdigest(),
+                "logical_ids": ["logical-op-filter", "logical-op-source"],
+            },
             "operator_count": 2,
             "complete_physical_queryplan": True,
             "provenance": "automatic",

@@ -23,6 +23,8 @@ PACKAGE_FILES = (
     Path("scripts/audit_html_features.py"),
     Path("scripts/canonical_spec.py"),
     Path("scripts/model_contract.py"),
+    Path("scripts/local_trace_driver.py"),
+    Path("scripts/optimizer_trace.py"),
     Path("scripts/plan_recovery.py"),
     Path("scripts/render_walkthrough.py"),
     Path("scripts/scaffold_model.py"),

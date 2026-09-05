@@ -35,8 +35,8 @@ class ManifestCoverageTests(unittest.TestCase):
 
     def test_spec_digest_and_all_acceptance_items_are_exactly_covered(self) -> None:
         raw_spec = SPEC_PATH.read_bytes()
-        self.assertEqual(len(raw_spec), 153001)
-        self.assertEqual(len(raw_spec.decode("utf-8").splitlines()), 2775)
+        self.assertEqual(len(raw_spec), 156807)
+        self.assertEqual(len(raw_spec.decode("utf-8").splitlines()), 2828)
         parsed = parse_acceptance_items()
         self.assertEqual(EXPECTED_ACCEPTANCE_ITEMS, 93)
         self.assertEqual(len(parsed), 93)

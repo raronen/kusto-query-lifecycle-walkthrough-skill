@@ -17,7 +17,7 @@ from model_contract import ModelError, validate_complete_model
 ROOT = Path(__file__).resolve().parent.parent
 SPEC_PATH = ROOT / "references" / "query-lifecycle-two-level-walkthrough.spec.md"
 MANIFEST_PATH = ROOT / "references" / "spec-compliance-manifest.json"
-EXPECTED_SPEC_SHA256 = "63b9cf2ad7f8c8e0169e6300f6c82df4e5e2957472de6f4d54492833c7a73206"
+EXPECTED_SPEC_SHA256 = "451568b906d2a804aff1ad1df4f5efef902723bb1cebdcba79bb23935755e500"
 EXPECTED_ACCEPTANCE_ITEMS = 93
 
 SECTION_SURFACES = {
@@ -163,6 +163,25 @@ def build_manifest(spec_path: Path = SPEC_PATH) -> dict[str, Any]:
                     "references/evidence-collection.md",
                 ],
                 "canonical_spec_impact": "none",
+            },
+            {
+                "id": "WE-FINAL-RELOP-AND-OPTIMIZER-TRACE",
+                "scope": "plan evidence, optimizer attribution, and physical lowering",
+                "reason": (
+                    "Render the actual final RelopTree, prohibit pass-history inference from "
+                    "final states, actively acquire request-scoped pass snapshots when locally "
+                    "authorized through an isolated Job-Object driver, retain only sanitized "
+                    "receipt proofs, and source-ground logical-to-physical lowering."
+                ),
+                "implementation": [
+                    "scripts/plan_recovery.py",
+                    "scripts/local_trace_driver.py",
+                    "scripts/optimizer_trace.py",
+                    "scripts/model_contract.py",
+                    "assets/walkthrough-template.html",
+                    "references/evidence-model.schema.json",
+                ],
+                "canonical_spec_impact": "additive evidence-integrity extension",
             }
         ],
         "parameterizations": [
@@ -183,8 +202,8 @@ def build_manifest(spec_path: Path = SPEC_PATH) -> dict[str, Any]:
             },
             {
                 "item_id": "AC-6FFCBFC759F3545E",
-                "reason": "The five-of-22 transformation result is canonical example data; reusable runs preserve the 22-position lab but derive transformation versus scheduled-no-op outcomes from query evidence.",
-                "verification": "validate_complete_model verifies every pass outcome and its before/after evidence; the rich fixture reproduces the canonical five-of-22 state.",
+                "reason": "The five-of-22 transformation result is canonical example data; reusable runs preserve the 22-position lab but classify TRANSFORMED or SCHEDULED_NO_OP only from runtime per-pass snapshots.",
+                "verification": "validate_complete_model verifies trace provenance and per-pass snapshot digests; source-only schedules render EXECUTED_OUTCOME_NOT_CAPTURED.",
             },
             {
                 "item_id": "AC-2670B83728DD0691",
@@ -311,6 +330,14 @@ def validate_manifest(manifest: dict[str, Any], spec_path: Path = SPEC_PATH) -> 
         if isinstance(extension, dict)
     ):
         raise ModelError("Compliance manifest lacks the physical QueryPlan recovery extension.")
+    if not any(
+        extension.get("id") == "WE-FINAL-RELOP-AND-OPTIMIZER-TRACE"
+        for extension in extensions
+        if isinstance(extension, dict)
+    ):
+        raise ModelError(
+            "Compliance manifest lacks the final Relop and optimizer trace extension."
+        )
     parameterized_ids: set[str] = set()
     for entry in parameterizations:
         if not isinstance(entry, dict):
@@ -476,6 +503,19 @@ def audit_runner_engines(rendered_html: str, model: dict[str, Any]) -> None:
         "function physicalDeepDive(",
         "Complete physical operator tree",
         "Logical → physical mappings",
+        'id="final-relop-panel"',
+        'id="final-relop-content"',
+        'id="optimizer-trace-status"',
+        'id="optimizer-acquisition"',
+        "function renderPlanEvidence(",
+        'fact("Active acquisition"',
+        'fact("Safety"',
+        'fact("Isolation proof"',
+        'fact("Owned process proof"',
+        'fact("Guaranteed cleanup"',
+        "EXECUTED_OUTCOME_NOT_CAPTURED",
+        "OUTCOME NOT CAPTURED",
+        "mapping.builder_method",
         "Remote query metadata",
         "const ids=[0,1,2,3,4,6]",
         '["Plan","Context","Both"]',

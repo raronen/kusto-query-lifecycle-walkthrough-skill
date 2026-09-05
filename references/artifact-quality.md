@@ -16,6 +16,10 @@ The generated page must be:
 - stateful rather than decorative: navigation, traversal, runner, experiment, context,
   failure-injection, and scenario controls must change visible output;
 - explicit about query-specific no-op phases;
+- explicit about optimizer acquisition authorization, isolation, loopback safety,
+  request-scope digest, owned-process exit, and cleanup receipt status without exposing paths,
+  PIDs, or the raw request scope;
+- backed by ordered canonical per-pass snapshots whenever a pass is labeled transformed/no-op;
 - complete for the evidenced physical plan;
 - ordered so execution stack and heap zones appear before runtime components;
 - safe against model-provided HTML/script injection.

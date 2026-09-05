@@ -24,7 +24,8 @@ Record only:
 - cluster URI and database supplied by the user;
 - whether the operation is guaranteed non-executing;
 - a SHA-256 digest of the raw plan;
-- sanitized structural facts needed by the walkthrough.
+- the actual final logical Relop payload and its independent SHA-256 digest;
+- sanitized physical structural facts needed by the walkthrough.
 
 Keep raw proprietary plans outside this repository. A local model/page may include an authorized
 raw-plan section only when the evidence policy permits it and the canonical physical deep dive
@@ -46,6 +47,30 @@ Accept either a named `QueryPlan` cell, the Kusto
 `ResultType = QueryPlan` / `Content` row shape, or the decoded plan object. Reject `Relop`,
 `replotree`, arbitrary `Kind`/`Operator` objects, missing child node types, non-boolean
 completeness flags, and incomplete/truncated flags at any envelope depth.
+
+### Final logical RelopTree gate
+
+Extract the final logical payload independently from the physical gate. Accept direct
+`RelopTree` / `relop_tree` keys and Kusto column or `ResultType` / `Content` envelopes. Preserve
+an object/array as JSON content or preserve nonempty serialized text exactly. Compute the digest
+over canonical JSON for structured content or the exact UTF-8 text for serialized content.
+Derive stable logical IDs from explicit `LogicalId`, `RelopId`, `NodeId`, or `Id` fields. When
+the accepted representation has none, derive deterministic JSON-path IDs for structured content
+or a content-hash root ID for opaque text. Reject EVIDENCE mode when no final logical payload is
+available.
+
+Always retain the exact-content digest for provenance. When structured content or textual
+content parses as JSON, also compute `canonical_digest_sha256` over sorted, compact JSON. Bind
+the terminal optimizer snapshot to the canonical structural digest, never to formatting or
+property order in the exact textual payload.
+
+For textual content, preserve and hash the original text but attempt JSON decoding first for ID
+derivation. Merge IDs discovered from parsed generic `Id` fields with explicit `logical-*`
+references found in the representation. Use regex/hash fallback only when JSON decoding fails.
+
+The logical payload does not prove physical completeness, and the physical tree does not replace
+the logical payload. Recovery may combine a previously captured final RelopTree with a
+user-supplied physical QueryPlan, but both remain separately digested and validated.
 
 When the gate fails, build only:
 
@@ -93,9 +118,76 @@ failed or was unavailable, and requires a non-empty `estimate_reason`. Estimated
 use query syntax plus exact source evidence to explain likely behavior and must avoid claiming
 that a pass ran, an operator exists, or a boundary was crossed unless supported.
 
-Use `OBSERVED` for plan-backed facts, `TRANSFORMED` only when before/after evidence proves a
-change, `SCHEDULED_NO_OP` when scheduling is observed but the tree is unchanged, and `NO_OP`
-for a query-specific phase with no work.
+For optimizer passes, final-state artifacts never identify pass history. Use `TRANSFORMED` or
+`SCHEDULED_NO_OP` only with runtime per-pass before/after snapshots whose recorded SHA-256
+digests match the displayed content. When pinned source control flow proves that a pass was
+scheduled/executed but no snapshots exist, use `EXECUTED_OUTCOME_NOT_CAPTURED` and display
+identical `OUTCOME NOT CAPTURED` panes. Use `NOT_TRACED` when even execution is unavailable.
+Use `NO_OP` only for a query-specific phase proven to have no work; do not relabel an untraced
+optimizer pass as a no-op.
+
+### Active optimizer trace acquisition
+
+Missing runtime snapshots trigger evidence acquisition, not immediate fallback. Inspect the
+current local source for an existing request-scoped diagnostic path around `PassManager.Execute`
+and concrete `pass.Execute` calls. Attempt that path first with the exact non-executing
+`.show queryplan <|` wrapper.
+
+If no existing path exposes before/after state, source modification is allowed only after
+explicit authorization for an isolated local-development workspace. Then:
+
+1. Require `query.cluster_uri` and the source-verified trace endpoint to be loopback URIs with
+   the same explicit, currently unowned port.
+2. Use `scripts\local_trace_driver.py` to create a new disposable git worktree outside the
+   primary checkout. Resolve `--base-ref` before creation, require it equals the primary/source
+   HEAD, and verify the created worktree is detached at that same commit. Never instrument in
+   the primary checkout. Require the primary checkout to be completely clean (tracked, staged,
+   and untracked), create an invocation-owned root with an exclusive marker, and recursively
+   delete only when that marker still matches. If ownership is unexpected, remove only confirmed
+   Git registration, leave the path, and fail cleanup.
+3. Add minimal instrumentation immediately before and after `pass.Execute`.
+4. Gate every emission on a unique request-scope token for this one plan request.
+5. Serialize only the logical tree needed for structural comparison; do not emit credentials,
+   tenant data, unrelated requests, or query results.
+6. Use repository-documented build and test commands under a finite timeout, then start a new
+   isolated local service. Place both build and service process trees in Windows Job Objects.
+   Launch suspended, assign the Job Object, then resume; wrap `.cmd`/`.bat` explicitly through
+   `%ComSpec%` without `shell=True`. Never stop, replace, or reuse an existing Engine process.
+7. Issue only the unchanged plan command; never submit the supplied query for execution.
+8. Capture the per-pass payload and validate it with `scripts\optimizer_trace.py`.
+9. In `finally`, terminate the Job Objects, treat any process-stop error as a failure, verify
+   every owned build/service PID exited, verify the port was released, and remove both the
+   disposable worktree path and registration even after partial worktree creation. Verify the
+   primary HEAD and status digest are unchanged.
+
+A COMPLETE model records this attempt in `optimizer_trace.acquisition`; `attempted: false` is
+invalid. Request-scoped instrumentation requires `explicit_local` authorization plus successful
+build/restart and completed cleanup. Without that authorization, attempt only existing
+read-only diagnostics and record `read_only_only`. Source-schedule or unavailable outcomes are
+permitted only after the runtime capture attempt fails and the failure is recorded.
+
+The driver's raw receipt contains local paths, PIDs, and the request-scope value and must remain
+outside the model and generated page. `optimizer_trace.py` validates its digest, source/worktree
+HEADs, port/process ownership, Job Object termination, primary-checkout preservation, and
+worktree cleanup, then retains only the receipt digest, request-scope digest, trace-output
+digest, and nonsensitive booleans/enums.
+
+Each captured pass contains exact before/after content and digests. Its ID is referenced exactly
+once by `runtime_evidence.trace_pass_id`. This binding, rather than a hand-authored digest pair,
+authorizes `TRANSFORMED` or `SCHEDULED_NO_OP`.
+
+Trace events are ordered, not a bag. Require sequence `1..N`, the optimizer phase, canonical
+model pass ID, concrete source pass identity, request scope on every event, `executed: true`,
+and an explicit `changed` boolean. Before/after values must already be canonical JSON strings
+that parse to nonempty Relop objects/arrays. Verify `changed` from the digests, require each
+event's before digest to equal the previous event's after digest, bind phase/identity/sequence
+to model order, and require the terminal after digest to equal
+`plan.final_relop.canonical_digest_sha256`. Reject opaque snapshots and relabeled IDs.
+
+For physical lowering, inspect the current implementation (for example the applicable
+`InitialQueryPlanBuilder.Visit*` methods). Each mapping must connect a logical ID derived from
+the recorded final RelopTree to physical operator IDs in the sanitized QueryPlan and include
+exact current-HEAD source links.
 
 ## Sensitive-data hygiene
 

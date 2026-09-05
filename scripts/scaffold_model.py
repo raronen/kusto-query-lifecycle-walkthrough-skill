@@ -190,6 +190,9 @@ def _pass_runner(key: str, count: int) -> dict[str, Any]:
             {
                 "id": f"{key}-applicable-pass-{index + 1}",
                 "title": f"Pending applicable pass {index + 1}",
+                "concrete_pass": (
+                    f"Pending.Pass.{key.replace('-', '_')}.Pass{index + 1}"
+                ),
                 "traversal": "Pending traversal.",
                 "predicate": "Pending predicate.",
                 "applicability": "Pending query-specific applicability.",
@@ -197,6 +200,13 @@ def _pass_runner(key: str, count: int) -> dict[str, Any]:
                 "before": "Pending cumulative input.",
                 "after": "Pending cumulative output.",
                 "outcome": "ESTIMATED",
+                "runtime_evidence": {
+                    "captured": False,
+                    "trace_pass_id": "",
+                    "sequence": 0,
+                    "before_digest_sha256": "",
+                    "after_digest_sha256": "",
+                },
                 "source_links": [],
             }
             for index in range(count)
@@ -599,6 +609,35 @@ def main() -> int:
             "project": args.project,
             "repository": "Azure-Kusto-Service",
             "workspace_head": head,
+        },
+        "optimizer_trace": {
+            "provenance": "unavailable",
+            "status": "UNAVAILABLE",
+            "description": (
+                "Runtime per-pass snapshots and source scheduling evidence have not been collected."
+            ),
+            "source_links": [],
+            "acquisition": {
+                "authorization": "read_only_only",
+                "workspace_kind": "local_development",
+                "attempted": False,
+                "method": "existing_non_executing_trace",
+                "instrumentation_changed": False,
+                "build_attempted": False,
+                "build_succeeded": False,
+                "restart_attempted": False,
+                "restart_succeeded": False,
+                "command": f".show queryplan <|\n{query}",
+                "non_executing": True,
+                "supplied_query_executed": False,
+                "request_scope_digest_sha256": "",
+                "cleanup_status": "not_required",
+                "outcome": "trace_unavailable",
+                "failure": "Optimizer trace acquisition has not been attempted.",
+                "raw_digest_sha256": "",
+                "driver_receipt": {},
+            },
+            "captured_passes": [],
         },
         "plan": {
             "tool": "pending non-executing query-plan collection",
